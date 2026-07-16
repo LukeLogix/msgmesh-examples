@@ -1,14 +1,22 @@
 // chat-web —— 最小網頁聊天室:用 @msgmesh/sdk 的 stream()(SSE)即時收訊、publish() 發訊。
-// 設定從 Vite 注入的環境變數讀取(見 .env.example)。
+// 鑑權走 token-broker:前端零長期 key,改由後端(server.js)的 /api/token 鑄短期降權 token。
+// gateway / realtime URL 與 topic 屬非敏感,續由 Vite 注入(見 .env.example)。
 import { MsgMesh } from "@msgmesh/sdk";
 
 const env = import.meta.env;
 const cfg = {
   gatewayUrl: env.VITE_MSGMESH_GATEWAY_URL,
   realtimeUrl: env.VITE_MSGMESH_REALTIME_URL,
-  apiKey: env.VITE_MSGMESH_API_KEY,
   topic: env.VITE_MSGMESH_TOPIC || "chat.lobby",
 };
+
+// 向後端 token-broker 領一張短期資料面 token。SDK 會自動快取、將過期前重取、SSE 重連時換新,
+// 故這裡不需自己管理有效期。回傳需為 { token, expires_in }。
+async function getToken() {
+  const r = await fetch("/api/token", { method: "POST" });
+  if (!r.ok) throw new Error("token broker " + r.status);
+  return r.json();
+}
 
 const $ = (id) => document.getElementById(id);
 const messagesEl = $("messages");
@@ -46,9 +54,10 @@ function addMessage({ user, text, ts }, mine) {
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
-// 設定不齊全時直接在畫面提示,不硬連線(避免一堆 console 錯誤看不懂)。
-if (!cfg.gatewayUrl || !cfg.realtimeUrl || !cfg.apiKey || cfg.apiKey === "replace-me") {
-  setStatus("尚未設定:請複製 .env.example 成 .env,填入 gateway/realtime URL 與 API key,再重啟 dev server。", "error");
+// URL 設定不齊全時直接在畫面提示,不硬連線(避免一堆 console 錯誤看不懂)。
+// token 由後端 /api/token 供應,前端無從得知 key;token-broker 是否就緒由 SDK 呼叫時回報。
+if (!cfg.gatewayUrl || !cfg.realtimeUrl) {
+  setStatus("尚未設定:請複製 .env.example 成 .env,填入 gateway/realtime URL,再重新 build。", "error");
   sendBtn.disabled = true;
 } else {
   start();
@@ -56,7 +65,7 @@ if (!cfg.gatewayUrl || !cfg.realtimeUrl || !cfg.apiKey || cfg.apiKey === "replac
 
 function start() {
   const mq = new MsgMesh({
-    apiKey: cfg.apiKey,
+    getToken,
     gatewayUrl: cfg.gatewayUrl,
     realtimeUrl: cfg.realtimeUrl,
   });

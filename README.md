@@ -24,14 +24,14 @@
    - `agent-notifier` 只收訊 → 需 **consumer**(或含 `subscribe` 能力的 key)。
    - `chat-web` 又收又發 → 需一把能同時 **publish + subscribe** 的 key。
 
-3. **Node ≥ 18。** `chat-web` 的建置與 `agent-notifier` 的收發都用 SDK 內建 `fetch`(Node 18+);`agent-notifier` 的 `npm start` 用 `--env-file` 讀 `.env`,需 Node ≥ 20.6(Node 18 的替代跑法見該資料夾 README)。
+3. **Node ≥ 18(建議 ≥ 20.6)。** 各樣板的收發都用 SDK 內建 `fetch`(Node 18+)。`chat-web` 的 token-broker(`server.js`)與 `agent-notifier` 都用 `--env-file` 讀 `.env`,需 Node ≥ 20.6(替代跑法見各自 README)。
 
 每個樣板各自附 `README.md`(如何 `npm install && npm run …`)與 `.env.example`。
 
 ## 安全須知
 
 - **絕不把 API key commit 進 repo。** 只放在本機 `.env`(已被 `.gitignore` 排除),`.env.example` 只保留佔位值。
-- `chat-web` 為求最小可跑,直接把 key 交給瀏覽器,**僅適合本機 / 內部 demo**。瀏覽器裡的東西都會外洩,**正式上線請改用 token-broker**:由後端(持長期 key)代換短期 token,前端改用 SDK 的 `getToken`。作法見 [`chat-web/README.md`](./chat-web/README.md) 的「上線安全」段。
+- `chat-web` **預設走 token-broker**:key 只放在它自帶的最小後端(`server.js`),前端零長期 key —— 後端持長期 key 代換短期降權 token,前端用 SDK 的 `getToken` 領取。這正是把即時收發放上瀏覽器的正確做法,原理與跑法見 [`chat-web/README.md`](./chat-web/README.md)。
 
 ## 授權
 
