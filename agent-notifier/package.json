@@ -1,0 +1,17 @@
+{
+  "name": "msgmesh-example-agent-notifier",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "訂閱一個 MsgMesh topic,收到事件就處理 —— 給 AI agent / 後端的事件層起手式。",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.6.0"
+  },
+  "scripts": {
+    "start": "node --env-file=.env index.js"
+  },
+  "dependencies": {
+    "@msgmesh/sdk": "^0.1.3"
+  }
+}

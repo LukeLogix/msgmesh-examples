@@ -1,0 +1,19 @@
+{
+  "name": "msgmesh-example-chat-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "最小網頁聊天室起手式 —— 用 @msgmesh/sdk 的 stream() 收、publish() 發。",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@msgmesh/sdk": "^0.1.3"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}
