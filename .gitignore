@@ -1,0 +1,13 @@
+# 依賴與建置產物
+node_modules/
+dist/
+.vite/
+
+# 祕密:只保留 .env.example,實際 .env 一律不進版控
+.env
+.env.*
+!.env.example
+
+# 雜項
+*.log
+.DS_Store
