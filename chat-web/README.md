@@ -126,6 +126,7 @@ npm run dev                       # 終端 B:Vite dev server(:5173)
 - 讓 `MSGMESH_API_KEY` 的能力就限於這個聊天室 topic 的 publish + subscribe(最小權限);別用 admin 或萬用 key。
 - `server.js` 只轉發 `{ token, expires_in }`,不把 key 或上游錯誤細節洩進前端回應。
 - 「每人一組房間」就是把 `MSGMESH_ROOMS` 改成**依登入身分動態產生**(如某租戶的房間集),在 `server.js` 的降權 body 填進 `capabilities[].rooms`——token 只能碰這些房間,平台強制,其餘一律 403。這比「每房一個 topic」更省(共用一個 topic + 一條 live-tail),隔離仍由憑證保證。
+- **平台不驗「誰在說話」。** 房間隔離只保證「能收發哪些房間」,不驗證訊息裡的 `user`(發訊者)——這個 demo 的暱稱就是前端自報的,同一房內任何人都能把 `user` 填成別人**冒名發言**。正式聊天要防冒名:**在 `server.js` 鑄 token 時綁定該登入使用者,並由後端戳上 / 驗證 `user`**,別讓前端自報身分。
 
 ## 檔案
 
