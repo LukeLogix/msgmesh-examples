@@ -24,6 +24,8 @@ const mq = new MsgMesh({
 });
 
 // 換成你自己的處理邏輯。msg.value 是字串;我們的發送端送 JSON,故先試著 parse。
+// 這是 firehose:收的是整個 topic 的每一則(不分房間)。msg.key = 發佈時帶的 key = 房間;
+// 要 per-room 分流就在這裡讀 msg.key 自行判斷(平台的 room 過濾只在 realtime SSE/WS,poll 沒有)。
 async function handleEvent(msg) {
   let payload = msg.value;
   try {
@@ -31,8 +33,9 @@ async function handleEvent(msg) {
   } catch {
     // 非 JSON 就當純字串處理
   }
+  const room = msg.key ? ` room=${msg.key}` : "";
   console.log(
-    `[${new Date().toISOString()}] ${MSGMESH_TOPIC}#${msg.partition}/${msg.offset}`,
+    `[${new Date().toISOString()}] ${MSGMESH_TOPIC}#${msg.partition}/${msg.offset}${room}`,
     payload,
   );
 }
