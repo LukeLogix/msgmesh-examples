@@ -6,10 +6,17 @@
 
 ## 樣板
 
-| 資料夾 | 是什麼 | 用到的 SDK |
-| --- | --- | --- |
-| [`chat-web/`](./chat-web) | 瀏覽器即時聊天室(Vite + 原生 JS,無框架) | `stream()` 收(SSE)、`publish()` 發 |
-| [`agent-notifier/`](./agent-notifier) | 監看事件的 Node 腳本 —— 給 AI agent / 後端的「事件層」 | `subscribe()` 長輪詢處理每一則事件 |
+| 資料夾 | 是什麼 | 用到的 SDK | 房間(room) |
+| --- | --- | --- | --- |
+| [`chat-web/`](./chat-web) | 瀏覽器即時聊天室(Vite + 原生 JS,無框架) | `stream()`(SSE)/ `streamWs()`(WebSocket)收、`publish()` 發 | ✅ per-room(token 降權 `rooms` + 平台強制隔離) |
+| [`agent-notifier/`](./agent-notifier) | 監看事件的 Node 腳本 —— 給 AI agent / 後端的「事件層」 | `subscribe()` 長輪詢處理每一則事件 | ⛔ firehose(整個 topic;room-scoped 憑證用不了) |
+
+### 房間(room)適用於哪些接入
+
+`room` = 同一個 topic 底下的子頻道(實體 = Kafka record key)。發佈用 `publish(topic, body, { key: room })` 標記房間;**能不能只收某房間,取決於接入類型**:
+
+- **Realtime(SSE `stream` / WebSocket `streamWs`)** 可 **per-room**:訂閱傳 `{ room }` 只收該房間;搭配後端 token-broker 把 token 的 `rooms` 降權到「該使用者可用房間」,平台強制隔離(逾越 403)。見 `chat-web`。
+- **Poll / consume(`subscribe` 長輪詢)** 是 **firehose**:吃整個 topic 的每一則,不做房間過濾;room-scoped 憑證呼叫會被 **403**。整租戶消費請用**不限房間**的 key,自行讀 `msg.key` 分流。見 `agent-notifier`。
 
 ## 共同前置
 
@@ -31,7 +38,7 @@
 ## 安全須知
 
 - **絕不把 API key commit 進 repo。** 只放在本機 `.env`(已被 `.gitignore` 排除),`.env.example` 只保留佔位值。
-- `chat-web` **預設走 token-broker**:key 只放在它自帶的最小後端(`server.js`),前端零長期 key —— 後端持長期 key 代換短期降權 token,前端用 SDK 的 `getToken` 領取。這正是把即時收發放上瀏覽器的正確做法,原理與跑法見 [`chat-web/README.md`](./chat-web/README.md)。
+- `chat-web` **預設走 token-broker**:key 只放在它自帶的最小後端(`server.js`),前端零長期 key —— 後端持長期 key 代換短期降權 token,前端用 SDK 的 `getToken` 領取。降權也涵蓋**房間**:token 的 `rooms` 被收窄到「該使用者可用房間」,平台強制,不同房間彼此隔離。這正是把即時收發放上瀏覽器的正確做法,原理與跑法見 [`chat-web/README.md`](./chat-web/README.md)。
 
 ## 授權
 
