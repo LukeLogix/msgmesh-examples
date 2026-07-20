@@ -20,12 +20,7 @@
 
 ## 共同前置
 
-1. **一個跑著的 MsgMesh。** 本機最快的方式是跑平台專案 `msgmesh-platform`:
-   ```bash
-   make up    # 起中間件(Postgres / Redis / Kafka)
-   make run   # allinone 跑 host:control-plane :8080 / gateway :8081 / realtime :8082
-   ```
-   或直接指向你已部署的實例,把各樣板 `.env` 裡的 URL 換成該實例的位址即可。
+1. **一個跑著的 MsgMesh 實例。** 把各樣板 `.env` 裡的 gateway / realtime / control-plane URL 指向你的實例——你**自架**的,或你 **hosted 帳號**的位址(在面板註冊即可拿到,見下）。本機自架時各服務預設埠為 control-plane `:8080` / gateway `:8081` / realtime `:8082`。
 
 2. **一把 API key。** 在面板註冊帳號後簽發(明文只顯示一次)。依樣板需要的能力挑 scope:
    - `agent-notifier` 只收訊 → 需 **consumer**(或含 `subscribe` 能力的 key)。
