@@ -1,3 +1,5 @@
+**繁體中文** | [English](./README.en.md)
+
 # agent-notifier —— MsgMesh 事件監看腳本
 
 一個 Node 腳本樣板,體現 MsgMesh 的定位:**給 AI agent 的事件層**。訂閱一個 topic,收到事件就處理 —— 傳統 pub/sub 給人或程式用,這裡讓你把事件流餵給 agent / 後端邏輯。
