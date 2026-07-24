@@ -1,10 +1,10 @@
 **English** | [繁體中文](./README.zh.md)
 
-# chat-web — MsgMesh web real-time chat starter
+# chat-web — MsgMesh web realtime chat starter
 
-A minimal browser chat room: many people connect to the same topic and, as they send, see everyone's messages in real time. No frontend framework — just Vite + vanilla JS — so you can directly follow every line of how the SDK is used.
+A minimal browser chat room: many people connect to the same topic and, as they send, see everyone's messages in realtime. No frontend framework — just Vite + vanilla JS — so you can directly follow every line of how the SDK is used.
 
-This template **uses a token-broker by default**: no long-lived key in the frontend, with authentication proxied by a minimal backend (`server.js`). This is exactly the correct way to put real-time send/receive in the browser. It also demonstrates both **multi-room isolation** and **two real-time transports (SSE / WebSocket)**.
+This template **uses a token-broker by default**: no long-lived key in the frontend, with authentication proxied by a minimal backend (`server.js`). This is exactly the correct way to put realtime send/receive in the browser. It also demonstrates both **multi-room isolation** and **two realtime transports (SSE / WebSocket)**.
 
 - **Receive**: `@msgmesh/sdk`'s [`stream()`](https://www.npmjs.com/package/@msgmesh/sdk) (SSE, the browser-native `EventSource`, connecting to `GET {realtime}/v1/topics/{topic}/sse`); or `streamWs()` (WebSocket, same interface). Both take an optional `{ room }` to receive only one room.
 - **Send**: `publish()` — `POST {gateway}/v1/topics/{topic}/messages`, sending `{ user, text, ts }` JSON; use `{ key: room }` to specify the room.
@@ -75,7 +75,7 @@ npm run build              # Vite bundles the frontend into dist/
 node --env-file=.env server.js   # start the token-broker + serve dist/, default http://localhost:8787
 ```
 
-Open http://localhost:8787, enter a nickname, and send a message; open another tab and it receives it in real time.
+Open http://localhost:8787, enter a nickname, and send a message; open another tab and it receives it in realtime.
 
 - **Try multiple rooms**: the `# lobby / # support / # random` menu in the title bar switches rooms (equivalent to the URL `?room=support`); two tabs see each other only in the same room, and different rooms are isolated from one another.
 - **Try WebSocket**: add `?transport=ws` to the URL (e.g. `http://localhost:8787/?room=support&transport=ws`) to receive via `streamWs`; the badge will show `WS`.

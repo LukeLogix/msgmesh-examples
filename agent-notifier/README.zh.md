@@ -9,7 +9,7 @@
 
 ## poll/consume 是 firehose —— 房間(room)在這裡用不了
 
-`subscribe()`(以及底層的 poll / consume)吃的是**整個 topic** 的 firehose:靠 consumer-group offset 消費全部分區、每則各處理一次。它**不做房間(room)過濾**,原因是本質衝突:
+`subscribe()`(以及底層的 poll / consume)吃的是**整個 topic** 的 firehose:靠 consumer-group offset 消費全部分區,每則由 group 中單一 consumer 處理(at-least-once,靠 consumer-group 分攤)。它**不做房間(room)過濾**,原因是本質衝突:
 
 - consumer-group 的 offset 是「整個 topic」的進度,per-room 過濾會把別房間的訊息一併吃掉又丟棄,offset 照樣前進 → 漏訊。
 - 若「每房一個 group」硬做隔離,等於每個房間都把整個 topic 讀一遍(讀取放大),完全不划算。

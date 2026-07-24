@@ -9,14 +9,14 @@ A Node script template that embodies MsgMesh's positioning: **an event layer for
 
 ## poll/consume is a firehose — rooms don't apply here
 
-`subscribe()` (and the underlying poll / consume) consumes the **whole topic** as a firehose: it uses the consumer-group offset to consume all partitions, processing each message exactly once. It does **not** do room filtering, because of a fundamental conflict:
+`subscribe()` (and the underlying poll / consume) consumes the **whole topic** as a firehose: it uses the consumer-group offset to consume all partitions, with each message handled by exactly one consumer in the group (at-least-once, load-shared across the group). It does **not** do room filtering, because of a fundamental conflict:
 
 - The consumer-group offset is the progress across the "whole topic"; per-room filtering would consume other rooms' messages and discard them while the offset advances anyway → lost messages.
 - Forcing isolation with "one group per room" would mean every room reads the whole topic again (read amplification) — utterly uneconomical.
 
 So the platform gates this kind of "whole-topic read" directly: **a poll/consume call with room-scoped credentials (a token whose `rooms` is non-empty) is rejected with 403**. This example needs a key with **no room restriction** (consumer/subscribe capability, empty `rooms` = all rooms) — it is meant to consume every event of the whole topic.
 
-- **For per-room real-time processing** (handling only one room's events): use **realtime** — SSE `stream(topic, …, { room })` or WebSocket `streamWs(topic, …, { room })` (see [`chat-web`](../chat-web)). Realtime is a shared live-tail where per-room filtering is cheap.
+- **For per-room realtime processing** (handling only one room's events): use **realtime** — SSE `stream(topic, …, { room })` or WebSocket `streamWs(topic, …, { room })` (see [`chat-web`](../chat-web)). Realtime is a shared live-tail where per-room filtering is cheap.
 - **For a backend worker doing whole-tenant consumption** (taking in every event from all of a tenant's rooms for DB / downstream work): use a key with **no room restriction** (as in this example), let one `subscribe` consume the whole topic, and split by reading `msg.key` (= the room) yourself in `handleEvent`.
 
 ## Run it
