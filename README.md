@@ -1,42 +1,42 @@
-**繁體中文** | [English](./README.en.md)
+**English** | [繁體中文](./README.zh.md)
 
 # msgmesh-examples
 
-**MsgMesh** 的官方範例／樣板集合 —— 每個資料夾都是一個「`clone` 就能跑」的最小起手式,示範如何用官方 SDK [`@msgmesh/sdk`](https://www.npmjs.com/package/@msgmesh/sdk) 接入 MsgMesh 這個多租戶事件總線,收發即時事件。
+Official examples / starter templates for **MsgMesh** — each folder is a minimal "`clone` and run" starting point that shows how to use the official [`@msgmesh/sdk`](https://www.npmjs.com/package/@msgmesh/sdk) SDK to connect to MsgMesh, the multi-tenant event bus, and send and receive realtime events.
 
-填上你的 gateway / realtime URL 與一把 API key,幾分鐘內就有一個能收發訊息的應用。
+Fill in your gateway / realtime URL and an API key, and within minutes you'll have an app that can send and receive messages.
 
-## 樣板
+## Templates
 
-| 資料夾 | 是什麼 | 用到的 SDK | 房間(room) |
+| Folder | What it is | SDK used | Room |
 | --- | --- | --- | --- |
-| [`chat-web/`](./chat-web) | 瀏覽器即時聊天室(Vite + 原生 JS,無框架) | `stream()`(SSE)/ `streamWs()`(WebSocket)收、`publish()` 發 | ✅ per-room(token 降權 `rooms` + 平台強制隔離) |
-| [`agent-notifier/`](./agent-notifier) | 監看事件的 Node 腳本 —— 給 AI agent / 後端的「事件層」 | `subscribe()` 長輪詢處理每一則事件 | ⛔ firehose(整個 topic;room-scoped 憑證用不了) |
+| [`chat-web/`](./chat-web) | Browser-based realtime chat room (Vite + vanilla JS, no framework) | `stream()` (SSE) / `streamWs()` (WebSocket) to receive, `publish()` to send | ✅ per-room (scoped-down token `rooms` + platform-enforced isolation) |
+| [`agent-notifier/`](./agent-notifier) | A Node script that watches events — the "event layer" for AI agents / backends | `subscribe()` long-polling to process every event | ⛔ firehose (the whole topic; room-scoped credentials won't work) |
 
-### 房間(room)適用於哪些接入
+### Which integrations support rooms
 
-`room` = 同一個 topic 底下的子頻道(實體 = Kafka record key)。發佈用 `publish(topic, body, { key: room })` 標記房間;**能不能只收某房間,取決於接入類型**:
+A `room` = a sub-channel under a single topic (physically = the Kafka record key). Publish with `publish(topic, body, { key: room })` to tag a room; **whether you can receive only one room depends on the integration type**:
 
-- **Realtime(SSE `stream` / WebSocket `streamWs`)** 可 **per-room**:訂閱傳 `{ room }` 只收該房間;搭配後端 token-broker 把 token 的 `rooms` 降權到「該使用者可用房間」,平台強制隔離(逾越 403)。見 `chat-web`。
-- **Poll / consume(`subscribe` 長輪詢)** 是 **firehose**:吃整個 topic 的每一則,不做房間過濾;room-scoped 憑證呼叫會被 **403**。整租戶消費請用**不限房間**的 key,自行讀 `msg.key` 分流。見 `agent-notifier`。
+- **Realtime (SSE `stream` / WebSocket `streamWs`)** supports **per-room**: pass `{ room }` when subscribing to receive only that room; combine it with a backend token-broker that scopes the token's `rooms` down to "the rooms this user may access", and the platform enforces the isolation (403 on overreach). See `chat-web`.
+- **Poll / consume (`subscribe` long-polling)** is a **firehose**: it consumes every message of the whole topic with no room filtering; a call with room-scoped credentials is rejected with **403**. For whole-tenant consumption use a key with **no room restriction** and split by reading `msg.key` yourself. See `agent-notifier`.
 
-## 共同前置
+## Common prerequisites
 
-1. **一個跑著的 MsgMesh 實例。** 把各樣板 `.env` 裡的 gateway / realtime / control-plane URL 指向你的實例——你**自架**的,或你 **hosted 帳號**的位址(在面板註冊即可拿到,見下）。本機自架時各服務預設埠為 control-plane `:8080` / gateway `:8081` / realtime `:8082`。
+1. **A running MsgMesh instance.** Point the gateway / realtime / control-plane URLs in each template's `.env` at your instance — one you **self-host**, or the address of your **hosted account** (obtained by registering in the panel; see below). When self-hosting locally, the default ports are control-plane `:8080` / gateway `:8081` / realtime `:8082`.
 
-2. **一把 API key。** 在面板註冊帳號後簽發(明文只顯示一次)。依樣板需要的能力挑 scope:
-   - `agent-notifier` 只收訊 → 需 **consumer**(或含 `subscribe` 能力的 key)。
-   - `chat-web` 又收又發 → 需一把能同時 **publish + subscribe** 的 key。
+2. **An API key.** Issued after registering an account in the panel (the plaintext is shown only once). Pick the scope by the capabilities each template needs:
+   - `agent-notifier` only receives → needs a **consumer** key (or a key that includes the `subscribe` capability).
+   - `chat-web` both receives and sends → needs a key that can both **publish + subscribe**.
 
-3. **Node ≥ 18(建議 ≥ 20.6)。** 各樣板的收發都用 SDK 內建 `fetch`(Node 18+)。`chat-web` 的 token-broker(`server.js`)與 `agent-notifier` 都用 `--env-file` 讀 `.env`,需 Node ≥ 20.6(替代跑法見各自 README)。
+3. **Node ≥ 18 (≥ 20.6 recommended).** Every template's send/receive uses the SDK's built-in `fetch` (Node 18+). The `chat-web` token-broker (`server.js`) and `agent-notifier` both read `.env` via `--env-file`, which needs Node ≥ 20.6 (alternative approaches are in each README).
 
-每個樣板各自附 `README.md`(如何 `npm install && npm run …`)與 `.env.example`。
+Each template ships its own `README.md` (how to `npm install && npm run …`) and `.env.example`.
 
-## 安全須知
+## Security notes
 
-- **絕不把 API key commit 進 repo。** 只放在本機 `.env`(已被 `.gitignore` 排除),`.env.example` 只保留佔位值。
-- `chat-web` **預設走 token-broker**:key 只放在它自帶的最小後端(`server.js`),前端零長期 key —— 後端持長期 key 代換短期降權 token,前端用 SDK 的 `getToken` 領取。降權也涵蓋**房間**:token 的 `rooms` 被收窄到「該使用者可用房間」,平台強制,不同房間彼此隔離。這正是把即時收發放上瀏覽器的正確做法,原理與跑法見 [`chat-web/README.md`](./chat-web/README.md)。
+- **Never commit an API key into the repo.** Keep it only in a local `.env` (already excluded by `.gitignore`); `.env.example` holds placeholder values only.
+- `chat-web` **uses a token-broker by default**: the key lives only in its bundled minimal backend (`server.js`), and the frontend holds no long-lived key — the backend holds the long-lived key and exchanges it for short-lived, scoped-down tokens, which the frontend obtains via the SDK's `getToken`. The scoping also covers **rooms**: the token's `rooms` are narrowed to "the rooms this user may access", enforced by the platform, so different rooms are isolated from one another. This is the correct way to put realtime send/receive in the browser; for the rationale and how to run it, see [`chat-web/README.md`](./chat-web/README.md).
 
-## 授權
+## License
 
-MIT —— 見 [LICENSE](./LICENSE)。
+MIT — see [LICENSE](./LICENSE).
