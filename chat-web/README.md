@@ -66,6 +66,8 @@ mq.streamWs(topic, onMsg, onErr, { room });
 
 Good for cases where SSE is blocked by an intermediary (proxy / firewall), or where you already have WebSocket infrastructure. `streamWs` uses the browser-native `WebSocket` (built into all modern browsers; on Node it needs ≥ 22, or switch to `subscribe` long-polling). The `SSE` / `WS` badge in the title bar shows which one is currently in use.
 
+Since `@msgmesh/sdk` 0.1.7, `streamWs` (like `stream`) **resumes across reconnects with no gaps**: messages dropped during a disconnect are backfilled on reconnect (at-least-once, deduped by cursor) — a chat client won't miss messages sent while it was briefly offline. This is automatic and transparent; no code change.
+
 ## Run it
 
 ```bash
