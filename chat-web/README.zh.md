@@ -65,6 +65,8 @@ mq.streamWs(topic, onMsg, onErr, { room });
 
 適合 SSE 被中間層(proxy / 防火牆)擋掉、或你已有 WebSocket 基礎設施的場景。`streamWs` 用瀏覽器原生 `WebSocket`(所有現代瀏覽器皆內建;Node 端則需 ≥ 22 或改用 `subscribe` 長輪詢)。標題列的 `SSE` / `WS` 徽章會顯示目前用哪一種。
 
+`@msgmesh/sdk` 0.1.7 起,`streamWs`(與 `stream` 一樣)**跨重連續傳、不漏訊息**:斷線期間漏掉的訊息會在重連時補回(at-least-once,依游標去重)——聊天短暫離線期間別人發的訊息不會漏。全自動、透明,無需改碼。
+
 ## 跑起來
 
 ```bash
