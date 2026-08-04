@@ -15,10 +15,10 @@ Fill in your gateway / realtime URL and an API key, and within minutes you'll ha
 
 ### Which integrations support rooms
 
-A `room` = a sub-channel under a single topic (physically = the Kafka record key). Publish with `publish(topic, body, { key: room })` to tag a room; **whether you can receive only one room depends on the integration type**:
+A `room` = a sub-channel under a single topic (physically = the Kafka record key). Publish with `publish(topic, body, { room })` to tag a room; **whether you can receive only one room depends on the integration type**:
 
 - **Realtime (SSE `stream` / WebSocket `streamWs`)** supports **per-room**: pass `{ room }` when subscribing to receive only that room; combine it with a backend token-broker that scopes the token's `rooms` down to "the rooms this user may access", and the platform enforces the isolation (403 on overreach). See `chat-web`.
-- **Poll / consume (`subscribe` long-polling)** is a **firehose**: it consumes every message of the whole topic with no room filtering; a call with room-scoped credentials is rejected with **403**. For whole-tenant consumption use a key with **no room restriction** and split by reading `msg.key` yourself. See `agent-notifier`.
+- **Poll / consume (`subscribe` long-polling)** is a **firehose**: it consumes every message of the whole topic with no room filtering; a call with room-scoped credentials is rejected with **403**. For whole-tenant consumption use a key with **no room restriction** and split by reading `msg.room` yourself. See `agent-notifier`.
 
 ## Common prerequisites
 

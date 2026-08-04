@@ -7,7 +7,7 @@ A minimal browser chat room: many people connect to the same topic and, as they 
 This template **uses a token-broker by default**: no long-lived key in the frontend, with authentication proxied by a minimal backend (`server.js`). This is exactly the correct way to put realtime send/receive in the browser. It also demonstrates both **multi-room isolation** and **two realtime transports (SSE / WebSocket)**.
 
 - **Receive**: `@msgmesh/sdk`'s [`stream()`](https://www.npmjs.com/package/@msgmesh/sdk) (SSE, the browser-native `EventSource`, connecting to `GET {realtime}/v1/topics/{topic}/sse`); or `streamWs()` (WebSocket, same interface). Both take an optional `{ room }` to receive only one room.
-- **Send**: `publish()` — `POST {gateway}/v1/topics/{topic}/messages`, sending `{ user, text, ts }` JSON; use `{ key: room }` to specify the room.
+- **Send**: `publish()` — `POST {gateway}/v1/topics/{topic}/messages`, sending `{ user, text, ts }` JSON; use `{ room }` to specify the room.
 - **Authentication**: the frontend holds no key and instead uses the SDK's `getToken` to obtain a short-lived token from the backend `/api/token` (see "token-broker" below). The token's capabilities have already been **scoped down by the backend to the rooms this user may access**, enforced by the platform (see "Multiple rooms and isolation").
 
 ## What the token-broker is
@@ -40,9 +40,9 @@ Data flow (frontend room → token scope-down → subscribe/publish):
    The platform narrows the token's capabilities to a subset of the backend key's (overreach → 403)
 3. The frontend takes this token:
      subscribe  stream / streamWs(topic, …, { room })   → realtime pushes only that room (?room)
-     publish    publish(topic, body, { key: room })       → the platform routes to that room by record key
+     publish    publish(topic, body, { room })            → the platform routes to that room by record key
 4. The platform checks the token's rooms on every receive / send:
-     ?room / ?key not in the allow-set → 403. Even if the frontend is tampered to point at someone
+     a ?room outside the allow-set → 403. Even if the frontend is tampered to point at someone
      else's room it gets nothing — the token simply never authorized it.
 ```
 
@@ -51,7 +51,7 @@ Data flow (frontend room → token scope-down → subscribe/publish):
 - **Don't want rooms at all**: leave `MSGMESH_ROOMS` and `VITE_MSGMESH_ROOMS` empty; omitting `rooms` = no room restriction = a single lobby, behaving like the older version.
 - **Only realtime supports per-room**: an SSE / WS subscription can carry `?room=` to precisely receive a single room; but poll / consume (long-polling the whole topic) is a **firehose** where room-scoped credentials don't work (the platform returns 403) — for fine-grained rooms, use realtime. See [`agent-notifier/README.md`](../agent-notifier/README.md) for details.
 
-> Version note: the publish-side `publish(…, { key })` has been supported since `@msgmesh/sdk` 0.1.3; the **subscribe-side `{ room }` filtering of `stream`/`streamWs`** requires the SDK version released together with the multi-room platform (older versions ignore the parameter and receive the whole topic). This template ships together with the multi-room platform.
+> Version note: both sides now use the same word. `publish(…, { room })` requires `@msgmesh/sdk` **0.2.0 or newer** — before 0.2.0 that option was called `key`, and 0.2.0 throws if you still pass `key` rather than silently dropping the routing. The **subscribe-side `{ room }` filtering of `stream`/`streamWs`** has been supported since 0.1.4. `package.json` therefore requires `^0.2.0`.
 
 ## Receiving over WebSocket (streamWs)
 
@@ -136,7 +136,7 @@ This template **already uses a token-broker by default**: no long-lived key in t
 ## Files
 
 - `index.html` — UI and styling (single file, no framework; includes the room menu and the SSE/WS badge).
-- `src/main.js` — reads config, obtains a token via `getToken`, receives with `stream()`/`streamWs()` (carrying `room`), sends with `publish()` (carrying `key`), switches rooms, renders messages.
+- `src/main.js` — reads config, obtains a token via `getToken`, receives with `stream()`/`streamWs()` (carrying `room`), sends with `publish()` (carrying `room`), switches rooms, renders messages.
 - `server.js` — minimal token-broker backend: `POST /api/token` mints short-lived **room-scoped** tokens + serves the `dist/` static frontend (zero extra dependencies, pure Node built-ins).
 - `vite.config.js` — proxies `/api` to the backend during development.
 - `.env.example` — config template (copy it to `.env`).

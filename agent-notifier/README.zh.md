@@ -17,7 +17,7 @@
 因此平台對此類「整 topic 讀」直接把關:**room-scoped 憑證(token 的 `rooms` 非空)呼叫 poll/consume 會被回 403**。這支範例要用**不限房間**的 key(consumer/subscribe 能力、`rooms` 空 = 全房間)——它本來就是要吃整個 topic 的每一則事件。
 
 - **要 per-room 即時處理**(只處理某個房間的事件):走 **realtime**——SSE `stream(topic, …, { room })` 或 WebSocket `streamWs(topic, …, { room })`(見 [`chat-web`](../chat-web))。realtime 是共享的 live-tail,per-room 過濾便宜。
-- **後端 worker 要整租戶消費**(把某租戶所有房間的事件都收下來做 DB / 下游):就用**不限房間**的 key(如本範例),一條 `subscribe` 吃整個 topic,自己在 `handleEvent` 裡讀 `msg.key`(= 房間)分流即可。
+- **後端 worker 要整租戶消費**(把某租戶所有房間的事件都收下來做 DB / 下游):就用**不限房間**的 key(如本範例),一條 `subscribe` 吃整個 topic,自己在 `handleEvent` 裡讀 `msg.room`(= 房間)分流即可。
 
 ## 跑起來
 
@@ -48,7 +48,7 @@ export $(grep -v '^#' .env | xargs) && node index.js
 
 ## 改成你的用途
 
-編輯 `index.js` 裡的 `handleEvent(msg)`:`msg.value` 是原始字串(範例會試著 `JSON.parse`)。把 `console.log` 換成寫入 DB、呼叫下游 API、或交給 LLM/agent 決策即可。若你的訊息有帶房間(發佈時的 `key`),`msg.key` 就是房間名,可據以 per-room 分流(poll 收的是全房間 firehose,分流由你在這裡做)。
+編輯 `index.js` 裡的 `handleEvent(msg)`:`msg.value` 是原始字串(範例會試著 `JSON.parse`)。把 `console.log` 換成寫入 DB、呼叫下游 API、或交給 LLM/agent 決策即可。若你的訊息有帶房間(發佈時的 `room`),`msg.room` 就是房間名,可據以 per-room 分流(poll 收的是全房間 firehose,分流由你在這裡做)。
 
 ## 檔案
 

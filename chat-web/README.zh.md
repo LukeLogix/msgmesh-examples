@@ -7,7 +7,7 @@
 這個樣板**預設走 token-broker**:前端零長期 key,鑑權由一支最小後端(`server.js`)代理。這正是把即時收發放上瀏覽器的正確做法。它同時示範**多房間(room)隔離**與**兩種即時 transport(SSE / WebSocket)**。
 
 - **收**:`@msgmesh/sdk` 的 [`stream()`](https://www.npmjs.com/package/@msgmesh/sdk)(SSE,瀏覽器原生 `EventSource`,連 `GET {realtime}/v1/topics/{topic}/sse`);或 `streamWs()`(WebSocket,同介面)。兩者都可傳選用 `{ room }` 只收某房間。
-- **發**:`publish()` —— `POST {gateway}/v1/topics/{topic}/messages`,送出 `{ user, text, ts }` JSON;用 `{ key: room }` 指定房間。
+- **發**:`publish()` —— `POST {gateway}/v1/topics/{topic}/messages`,送出 `{ user, text, ts }` JSON;用 `{ room }` 指定房間。
 - **鑑權**:前端不放 key,改用 SDK 的 `getToken` 向後端 `/api/token` 領短期 token(見下方「token-broker」)。token 的能力已被後端**降權到該使用者可用的房間**,平台強制(見「多房間與隔離」)。
 
 ## token-broker 是什麼
@@ -40,9 +40,9 @@ SDK 拿到 token 後會自動快取、於將過期前重取、SSE 重連時換�
    平台把 token 能力收斂成後端 key 的子集(逾越 403)
 3. 前端拿這一張 token:
      訂閱  stream / streamWs(topic, …, { room })   → realtime 只推該房間(?room)
-     發佈  publish(topic, body, { key: room })       → 平台以 record key 路由到該房間
+     發佈  publish(topic, body, { room })            → 平台以 record key 路由到該房間
 4. 平台對每次收 / 發都比對 token 的 rooms:
-     ?room / ?key 不在允許集 → 403。前端就算被竄改成別人的房間也拿不到——token 根本沒授權。
+     ?room 不在允許集 → 403。前端就算被竄改成別人的房間也拿不到——token 根本沒授權。
 ```
 
 - **可用房間由後端決定**:前端的 `VITE_MSGMESH_ROOMS` 只用來畫選單;真正的授權邊界是**後端 token 的 `rooms`**(`MSGMESH_ROOMS`)。把 `MSGMESH_ROOMS` 依登入身分產生,就是「每人 / 每租戶一組房間」的多租戶隔離。
@@ -50,7 +50,7 @@ SDK 拿到 token 後會自動快取、於將過期前重取、SSE 重連時換�
 - **不想分房間**:留空 `MSGMESH_ROOMS` 與 `VITE_MSGMESH_ROOMS`,`rooms` 省略 = 不限房間 = 單一大廳,行為同舊版。
 - **只有 realtime 能 per-room**:SSE / WS 訂閱可帶 `?room=` 精準收單一房間;但 poll / consume(長輪詢整個 topic)是 **firehose**,room-scoped 憑證用不了(平台回 403)——細顆粒房間請走 realtime。詳見 [`agent-notifier/README.zh.md`](../agent-notifier/README.zh.md)。
 
-> 版本註記:發佈端 `publish(…, { key })` 在 `@msgmesh/sdk` 0.1.3 已支援;**訂閱端 `stream`/`streamWs` 的 `{ room }` 過濾**需與多房間平台一起發佈的 SDK 版本(舊版會忽略該參數、收整個 topic)。本樣板隨多房間平台一起上。
+> 版本註記:收發兩端現在同一個詞。發佈端 `publish(…, { room })` 需 `@msgmesh/sdk` **0.2.0 以上** —— 0.2.0 之前這個選項叫 `key`,而 0.2.0 若仍傳 `key` 會直接丟錯(不會靜默把房間路由丟掉)。**訂閱端 `stream`/`streamWs` 的 `{ room }` 過濾**自 0.1.4 起支援。故 `package.json` 要求 `^0.2.0`。
 
 ## 用 WebSocket 收(streamWs)
 
@@ -135,7 +135,7 @@ npm run dev                       # 終端 B:Vite dev server(:5173)
 ## 檔案
 
 - `index.html` —— UI 與樣式(單檔,無框架;含房間選單與 SSE/WS 徽章)。
-- `src/main.js` —— 讀設定、`getToken` 領 token、`stream()`/`streamWs()` 收(帶 `room`)、`publish()` 發(帶 `key`)、房間切換、渲染訊息。
+- `src/main.js` —— 讀設定、`getToken` 領 token、`stream()`/`streamWs()` 收(帶 `room`)、`publish()` 發(帶 `room`)、房間切換、渲染訊息。
 - `server.js` —— 最小 token-broker 後端:`POST /api/token` 鑄短期**房間降權** token + 服務 `dist/` 靜態前端(零額外依賴,純 Node 內建)。
 - `vite.config.js` —— 開發期把 `/api` 代理到後端。
 - `.env.example` —— 設定範本(複製成 `.env`)。
