@@ -129,8 +129,10 @@ function start() {
   renderRooms();
   subscribe();
 
-  // 發:publish JSON 物件,並用 key 指定房間(平台以 record key 做房間路由,且對照 token 的 rooms
+  // 發:publish JSON 物件,並用 room 指定房間(平台以 record key 做房間路由,且對照 token 的 rooms
   // 強制授權——不在允許集回 403)。訊息會經訂閱回流,由 onMessage 統一渲染(含自己這筆)。
+  // 收發兩端都叫 room:subscribe 傳 { room }、publish 也傳 { room }(SDK 0.2.0 起;更早的版本
+  // 這個選項叫 key,故 package.json 要求 ^0.2.0)。
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const text = textInput.value.trim();
@@ -138,7 +140,7 @@ function start() {
     const user = nameInput.value.trim() || "anon";
     textInput.value = "";
     try {
-      const opts = activeRoom ? { key: activeRoom } : {};
+      const opts = activeRoom ? { room: activeRoom } : {};
       await mq.publish(cfg.topic, { user, text, ts: Date.now() }, opts);
     } catch (err) {
       console.error("publish 失敗:", err);

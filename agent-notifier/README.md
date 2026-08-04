@@ -17,7 +17,7 @@ A Node script template that embodies MsgMesh's positioning: **an event layer for
 So the platform gates this kind of "whole-topic read" directly: **a poll/consume call with room-scoped credentials (a token whose `rooms` is non-empty) is rejected with 403**. This example needs a key with **no room restriction** (consumer/subscribe capability, empty `rooms` = all rooms) — it is meant to consume every event of the whole topic.
 
 - **For per-room realtime processing** (handling only one room's events): use **realtime** — SSE `stream(topic, …, { room })` or WebSocket `streamWs(topic, …, { room })` (see [`chat-web`](../chat-web)). Realtime is a shared live-tail where per-room filtering is cheap.
-- **For a backend worker doing whole-tenant consumption** (taking in every event from all of a tenant's rooms for DB / downstream work): use a key with **no room restriction** (as in this example), let one `subscribe` consume the whole topic, and split by reading `msg.key` (= the room) yourself in `handleEvent`.
+- **For a backend worker doing whole-tenant consumption** (taking in every event from all of a tenant's rooms for DB / downstream work): use a key with **no room restriction** (as in this example), let one `subscribe` consume the whole topic, and split by reading `msg.room` (= the room) yourself in `handleEvent`.
 
 ## Run it
 
@@ -48,7 +48,7 @@ export $(grep -v '^#' .env | xargs) && node index.js
 
 ## Adapt it to your use case
 
-Edit `handleEvent(msg)` in `index.js`: `msg.value` is the raw string (the example tries to `JSON.parse` it). Replace the `console.log` with a DB write, a downstream API call, or a handoff to an LLM/agent decision. If your messages carry a room (the `key` at publish time), `msg.key` is the room name, which you can use for per-room routing (poll receives the all-rooms firehose; the splitting is up to you here).
+Edit `handleEvent(msg)` in `index.js`: `msg.value` is the raw string (the example tries to `JSON.parse` it). Replace the `console.log` with a DB write, a downstream API call, or a handoff to an LLM/agent decision. If your messages carry a room (the `room` at publish time), `msg.room` is the room name, which you can use for per-room routing (poll receives the all-rooms firehose; the splitting is up to you here).
 
 ## Files
 
