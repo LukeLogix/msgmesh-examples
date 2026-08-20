@@ -156,7 +156,9 @@ jobs:
   ci-ok:
     if: always()
     needs: [discover, example]
-    name: CI 全綠
+    # 名稱刻意與 job id 相同且維持 ASCII:required status check 是按這個顯示名稱
+    # 比對的,改名等於讓 branch protection 靜靜失效(它會一直等一個永不出現的 check)。
+    name: ci-ok
     runs-on: ubuntu-latest
     steps:
       - run: |
