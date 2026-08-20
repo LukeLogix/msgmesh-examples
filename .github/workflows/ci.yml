@@ -1,0 +1,168 @@
+name: CI
+
+# 本 repo 是唯一對外公開的 repo,承諾「clone 就能跑」。這支 CI 守的就是那句話:
+# 每個範例都必須裝得起來、建置得出產物、而且它呼叫的 SDK API 在「實際裝到的那版」上存在。
+#
+# 由來:chat-web 的 package.json 在 2026-08-04(#7)bump 到 @msgmesh/sdk ^0.2.0,
+# package-lock.json 沒跟著重產,`npm ci` 直接 EUSAGE 報錯。公開範例壞了 16 天沒人發現,
+# 因為當時本 repo 完全沒有 CI。
+#
+# 設計原則:寧可誤紅,不可假綠。每一步都要問「這步在該擋的時候真的會擋嗎」,
+# 而不是「這步現在是不是綠的」。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # 範例清單從檔案系統推導,不硬編。硬編的話新增第三個範例時,只要有人忘了改
+  # matrix,它就會被 100% 靜默略過 —— 那正是 16 天事件的重演。
+  discover:
+    name: 盤點範例
+    runs-on: ubuntu-latest
+    outputs:
+      examples: ${{ steps.list.outputs.examples }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list
+        run: |
+          set -euo pipefail
+          # mindepth 2 排除 repo 根自己的 package.json(目前沒有,但別讓它日後變成一個空 job)
+          # -exec dirname 而非 | xargs dirname:xargs 會被含空白的路徑拆錯(shellcheck SC2038)
+          examples=$(find . -mindepth 2 -maxdepth 2 -name package.json \
+              -not -path './node_modules/*' \
+              -not -path './scripts/*' \
+              -not -path './.github/*' \
+              -exec dirname {} \; \
+            | sed 's|^\./||' | sort \
+            | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          if [ "$examples" = "[]" ]; then
+            echo "::error::找不到任何範例目錄 —— 偵測規則壞了,不是真的沒有範例"
+            exit 1
+          fi
+          echo "examples=$examples" >> "$GITHUB_OUTPUT"
+          echo "偵測到範例:$examples"
+
+  example:
+    needs: discover
+    name: ${{ matrix.example }} · node ${{ matrix.node }}
+    # 用 GitHub 託管 runner:公開 repo 的託管額度免費,而且不需要任何特殊環境就能重現。
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        example: ${{ fromJSON(needs.discover.outputs.examples) }}
+        # 20 = agent-notifier 的 engines 宣告下限;22 = 現行 LTS。
+        # 使用者 clone 下來用哪個 Node 我們管不著,兩端都要綠。
+        node: [20, 22]
+
+    defaults:
+      run:
+        working-directory: ${{ matrix.example }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: ${{ matrix.example }}/package-lock.json
+
+      # 主閘門。npm ci 要求 lockfile 與 package.json 相符,不符就非零退出 ——
+      # 這正是 2026-08-04 那次漂移會被擋下來的地方。
+      # 刻意不用 npm install:那會「順手把 lock 改對」,讓漂移靜靜溜過去。
+      - name: 安裝(npm ci —— lockfile 必須與 package.json 同步)
+        run: npm ci
+
+      # 刻意不用 `npm run build --if-present`,也刻意不從 package.json 反推該不該建置:
+      # 那兩種做法在 build script 被刪掉或打錯字時,都會把「壞了」誤讀成「這個範例
+      # 本來就不用建置」而回 0,使用者照 README 跑 server 只會拿到 404。
+      # 改成讀 .ci-expect.json 的宣告 —— 宣告了就必須建得出那個檔,少一樣都紅。
+      - name: 建置(依 .ci-expect.json 的 buildsTo 宣告)
+        run: |
+          set -euo pipefail
+          buildsTo=$(node -e "
+            const fs = require('node:fs');
+            let e = {};
+            try { e = JSON.parse(fs.readFileSync('.ci-expect.json', 'utf8')); } catch {}
+            process.stdout.write(e.buildsTo || '');
+          ")
+          if [ -z "$buildsTo" ]; then
+            echo "· .ci-expect.json 未宣告 buildsTo,此範例無建置步驟"
+            exit 0
+          fi
+          if ! node -e "const s = require('./package.json').scripts || {}; process.exit(s.build ? 0 : 1)"; then
+            echo "::error file=${{ matrix.example }}/package.json::.ci-expect.json 宣告了 buildsTo=${buildsTo},但 package.json 沒有 build script(被刪掉或打錯字?)"
+            exit 1
+          fi
+          npm run build
+          if [ ! -f "$buildsTo" ]; then
+            echo "::error file=${{ matrix.example }}/.ci-expect.json::建置成功但沒產出宣告的 ${buildsTo}(outDir 被改走?)。server.js 從該路徑供檔,缺了使用者會拿到 404。"
+            exit 1
+          fi
+          echo "✓ 建置產出 ${buildsTo}"
+
+      # npm ci 只證明裝得起來,不會發現「SDK 把方法改名了、範例還在呼叫舊名」。
+      # 這步補這個縫;它自己的失效模式(掃不到、覆蓋率縮水)也會讓 CI 紅,不會假綠。
+      - name: SDK API 冒煙
+        run: node ../scripts/api-smoke.mjs
+
+  # 諮詢性質,刻意獨立成一個 job 且不列入 ci-ok:範例釘在舊版 SDK 可能是刻意的,
+  # 落後一版不是缺陷。但必須看得見,否則公開範例會安靜地爛掉。
+  # 直接讀 lockfile 而不安裝 —— lockfile 鎖到什麼版本,使用者 npm ci 就拿到什麼版本。
+  sdk-freshness:
+    needs: discover
+    name: SDK 版本新鮮度(僅提示)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 比對 lockfile 鎖定版本 vs npm 最新版
+        run: |
+          set -uo pipefail   # 刻意不加 -e:這個 job 不該把任何人擋下來
+          latest=$(npm view @msgmesh/sdk version 2>/dev/null || echo "")
+          if [ -z "$latest" ]; then
+            echo "· 查不到 npm 最新版(registry 不可用),略過"
+            exit 0
+          fi
+          echo "npm 最新版:@msgmesh/sdk@${latest}"
+          for ex in $(echo '${{ needs.discover.outputs.examples }}' | jq -r '.[]'); do
+            lock="${ex}/package-lock.json"
+            [ -f "$lock" ] || { echo "· ${ex}:無 lockfile,略過"; continue; }
+            locked=$(jq -r '.packages["node_modules/@msgmesh/sdk"].version // empty' "$lock")
+            [ -n "$locked" ] || { echo "· ${ex}:未依賴 SDK,略過"; continue; }
+            if [ "$locked" = "$latest" ]; then
+              echo "✓ ${ex}:${locked} 已是最新"
+            else
+              echo "::warning file=${ex}/package.json::${ex} 的 lockfile 鎖在 @msgmesh/sdk@${locked},npm 最新為 ${latest}。若非刻意釘版,請 bump package.json 後重跑 npm install 讓 lockfile 一起更新。"
+            fi
+          done
+
+  # 固定名稱的彙總閘門。範例 matrix 是動態的,job 名稱會隨範例增減而變動,
+  # 沒辦法直接拿去當 branch protection 的 required status check —— 這個可以。
+  ci-ok:
+    if: always()
+    needs: [discover, example]
+    name: CI 全綠
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "discover=${{ needs.discover.result }}  example=${{ needs.example.result }}"
+          if [ "${{ needs.discover.result }}" != "success" ] || [ "${{ needs.example.result }}" != "success" ]; then
+            echo "::error::有 job 未成功(含被取消 / 被略過)"
+            exit 1
+          fi
+          echo "✓ 全部範例通過"
