@@ -8,6 +8,10 @@ dist/
 .env.*
 !.env.example
 
+# 本地 worktree(本專案開發預設用 git worktree 並行,掛載點固定在此)——
+# 其他 5 個 repo 都已忽略,這裡漏了。公開 repo 尤其不能讓檢出物意外進版控。
+.worktrees/
+
 # 雜項
 *.log
 .DS_Store
