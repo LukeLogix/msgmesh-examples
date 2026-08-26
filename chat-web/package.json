@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "最小網頁聊天室起手式 —— 用 @msgmesh/sdk 的 stream() 收、publish() 發。",
+  "description": "Minimal web chat room starter — receive with @msgmesh/sdk's stream(), send with publish().",
   "license": "MIT",
   "scripts": {
     "dev": "vite",

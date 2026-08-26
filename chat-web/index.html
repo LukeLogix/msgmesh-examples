@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="zh-Hant">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>MsgMesh · 即時聊天室範例</title>
+    <title>MsgMesh — Realtime chat example</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -128,15 +128,15 @@
   <body>
     <main>
       <header>
-        <h1>MsgMesh · 即時聊天室 <span id="transport" class="badge"></span></h1>
+        <h1>MsgMesh — Realtime chat <span id="transport" class="badge"></span></h1>
         <nav id="rooms" class="rooms"></nav>
-        <div id="status" data-kind="pending">初始化中…</div>
+        <div id="status" data-kind="pending">Initializing…</div>
       </header>
       <ul id="messages"></ul>
       <form id="composer" autocomplete="off">
-        <input id="name" placeholder="暱稱" />
-        <input id="text" placeholder="輸入訊息,Enter 送出" />
-        <button type="submit">送出</button>
+        <input id="name" placeholder="Nickname" />
+        <input id="text" placeholder="Type a message, press Enter to send" />
+        <button type="submit">Send</button>
       </form>
     </main>
     <script type="module" src="/src/main.js"></script>
