@@ -1,5 +1,7 @@
 {
-  "_": "CI 對這個範例的預期(.github/workflows/ci.yml + scripts/api-smoke.mjs 會讀)。改動範例時一併更新——這裡是宣告,CI 不從程式碼反推,否則刪掉東西會被誤認成『本來就沒有』而靜靜通過。",
-  "sdkMethods": ["subscribe"],
+  "_": "What CI expects of this example (read by .github/workflows/ci.yml + scripts/api-smoke.mjs). Update it together with any change to the example — this file is a declaration; CI does not infer it from the code, because inference would misread «things got deleted» as «they never existed» and silently pass. sdkMethods is an add-only ratchet: never delete an entry — when the example genuinely stops calling a method, keep it listed and record it in the optional removedSdkMethods as {\"method\": \"non-empty reason\"}; CI prints the reason as an audit trail. Updating the baseline by copying an error message is exactly the bypass this guards against.",
+  "sdkMethods": [
+    "subscribe"
+  ],
   "buildsTo": null
 }

@@ -8,6 +8,7 @@ This template **uses a token-broker by default**: no long-lived key in the front
 
 - **Receive**: `@msgmesh/sdk`'s [`stream()`](https://www.npmjs.com/package/@msgmesh/sdk) (SSE, the browser-native `EventSource`, connecting to `GET {realtime}/v1/topics/{topic}/sse`); or `streamWs()` (WebSocket, same interface). Both take an optional `{ room }` to receive only one room.
 - **Send**: `publish()` — `POST {gateway}/v1/topics/{topic}/messages`, sending `{ user, text, ts }` JSON; use `{ room }` to specify the room.
+- **Backlog**: on join and on every room switch, `history()` (SDK 0.2.0+) first fetches the latest 50 messages so a late joiner does not face a blank screen, then the live stream resumes from the `resume_from` cursor the history page handed back, with the overlap deduped.
 - **Authentication**: the frontend holds no key and instead uses the SDK's `getToken` to obtain a short-lived token from the backend `/api/token` (see "token-broker" below). The token's capabilities have already been **scoped down by the backend to the rooms this user may access**, enforced by the platform (see "Multiple rooms and isolation").
 
 ## What the token-broker is
@@ -29,7 +30,7 @@ Once the SDK has a token it caches it automatically, refetches before it expires
 
 ## Multiple rooms and isolation
 
-A `room` = a sub-channel under a single topic, physically the **Kafka record key**. On publish you tag the room with the key; on subscribe you use the room to receive only that room; which rooms are available is **decided by the token minted by the backend and enforced by the platform** — this is "true isolation", not reliant on the frontend being honest.
+A `room` = a sub-channel under a single topic, physically the **Kafka record key**. Both directions pass `{ room }` (SDK 0.2.0+): publish targets that room, subscribe receives only that room; which rooms are available is **decided by the token minted by the backend and enforced by the platform** — this is "true isolation", not reliant on the frontend being honest.
 
 Data flow (frontend room → token scope-down → subscribe/publish):
 

@@ -1,9 +1,11 @@
-// agent-notifier —— 訂閱一個 MsgMesh topic,收到事件就處理。
+// agent-notifier — subscribes to one MsgMesh topic and handles every event it receives.
 //
-// 這體現 MsgMesh 的定位:「給 AI agent 的事件層」。這裡示範把事件印出來;
-// 把 handleEvent 換成你要的動作即可:寫入 DB、呼叫下游 webhook、丟給 LLM/agent 做決策…
+// This embodies MsgMesh's positioning: "the event layer for AI agents". Here the events are
+// printed; swap handleEvent for whatever you need: write to a DB, call a downstream webhook,
+// hand it to an LLM/agent for a decision...
 //
-// 用 @msgmesh/sdk 的 subscribe():內部是長輪詢迴圈,回傳一個停止函式。Node 端不需 WebSocket。
+// Uses @msgmesh/sdk's subscribe(): a long-polling loop inside, returning a stop function.
+// No WebSocket needed on the Node side.
 import { MsgMesh } from "@msgmesh/sdk";
 
 const {
@@ -14,25 +16,27 @@ const {
 } = process.env;
 
 if (!MSGMESH_API_KEY) {
-  console.error("缺少 MSGMESH_API_KEY:請複製 .env.example 成 .env 並填入(收訊需 consumer 能力的 key)。");
+  console.error("Missing MSGMESH_API_KEY: copy .env.example to .env and fill it in (receiving needs a key with the consumer capability).");
   process.exit(1);
 }
 
 const mq = new MsgMesh({
   apiKey: MSGMESH_API_KEY,
-  gatewayUrl: MSGMESH_GATEWAY_URL, // 收發都走 gateway;subscribe 只用到它
+  gatewayUrl: MSGMESH_GATEWAY_URL, // both send and receive go through the gateway; subscribe only uses this
 });
 
-// 換成你自己的處理邏輯。msg.value 是字串;我們的發送端送 JSON,故先試著 parse。
-// 這是 firehose:收的是整個 topic 的每一則(不分房間)。msg.room = 發佈時帶的 room = 房間;
-// 要 per-room 分流就在這裡讀 msg.room 自行判斷(平台的 room 過濾只在 realtime SSE/WS,poll 沒有)。
-// `?? msg.key` 是為了同時相容舊版平台:room 是新名字,舊版回應裡這個欄位叫 key,兩邊都吃就不挑版本。
+// Replace with your own handling logic. msg.value is a string; our sender publishes JSON, so try
+// parsing it first. This is a firehose: it receives every message on the whole topic (all rooms).
+// msg.room = the room passed at publish time; for per-room dispatch, read msg.room here and branch
+// yourself (the platform's room filtering only exists on realtime SSE/WS, not on poll).
+// `?? msg.key` keeps compatibility with older platforms: room is the new name — older responses
+// call this field key — accepting both works on every version.
 async function handleEvent(msg) {
   let payload = msg.value;
   try {
     payload = JSON.parse(msg.value);
   } catch {
-    // 非 JSON 就當純字串處理
+    // not JSON — treat it as a plain string
   }
   const roomName = msg.room ?? msg.key;
   const room = roomName ? ` room=${roomName}` : "";
@@ -42,23 +46,24 @@ async function handleEvent(msg) {
   );
 }
 
-console.log(`agent-notifier:訂閱 topic "${MSGMESH_TOPIC}"(group=${MSGMESH_GROUP})… 按 Ctrl-C 結束`);
+console.log(`agent-notifier: subscribing to topic "${MSGMESH_TOPIC}" (group=${MSGMESH_GROUP})... press Ctrl-C to quit`);
 
-// subscribe(topic, opts, handler) → 停止函式。
-// onError:每次輪詢出錯時回報(暫時性錯誤 SDK 會自動退避重試;金鑰失效等終態才會停)。
+// subscribe(topic, opts, handler) → stop function.
+// onError: reports every polling error (the SDK backs off and retries transient errors on its own;
+// only terminal states like a revoked key stop the loop).
 const stop = mq.subscribe(
   MSGMESH_TOPIC,
   {
     group: MSGMESH_GROUP,
-    onError: (err) => console.error("訂閱錯誤(SDK 會自動重試):", err?.message || err),
+    onError: (err) => console.error("subscribe error (the SDK retries automatically):", err?.message || err),
   },
   handleEvent,
 );
 
-// 優雅結束:停止輪詢迴圈後退出。
+// Graceful shutdown: stop the polling loop, then exit.
 for (const sig of ["SIGINT", "SIGTERM"]) {
   process.on(sig, () => {
-    console.log(`\n收到 ${sig},停止訂閱。`);
+    console.log(`\nReceived ${sig}, stopping the subscription.`);
     stop();
     process.exit(0);
   });

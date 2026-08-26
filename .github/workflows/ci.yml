@@ -151,20 +151,62 @@ jobs:
             fi
           done
 
+  # PR body 裡被反引號(inline code / 程式碼區塊)包住的 Closes/Fixes/Resolves,
+  # GitHub 不解析:merge 後 issue 不會自動關,而且沒有任何錯誤訊息——人眼讀起來
+  # 卻完全正確(本生態已踩過兩次)。這個 job 把「看起來做了但實際沒生效」變成紅色。
+  # 只在 pull_request 事件跑(push / dispatch 沒有 PR body 可驗)。
+  pr-closes-lint:
+    if: github.event_name == 'pull_request'
+    name: pr-closes-lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: PR body 的 Closes 必須是純文字
+        # PR body 是外部輸入,走 env 傳遞、不做 ${{ }} 內插進 script,避免注入。
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$PR_BODY" > "$RUNNER_TEMP/pr-body.md"
+          bad=0
+          # 行內 code span:`Closes ...#N` 之類
+          if grep -Eiq '`[^`]*(clos(e|es|ed)|fix(es|ed)?|resolv(e|es|ed))[^`]*#[0-9]+[^`]*`' "$RUNNER_TEMP/pr-body.md"; then
+            echo '::error::PR body 有被反引號包住的 Closes/Fixes/Resolves + #issue —— GitHub 不會解析,merge 後 issue 不會自動關。請把那行改成純文字。'
+            bad=1
+          fi
+          # 圍欄程式碼區塊(```)裡的 Closes 同樣不會被解析
+          if awk '
+              /^[[:space:]]*```/ { fence = !fence; next }
+              fence { if (tolower($0) ~ /(close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)[^#]*#[0-9]+/) hit = 1 }
+              END { exit hit ? 0 : 1 }
+            ' "$RUNNER_TEMP/pr-body.md"; then
+            echo '::error::PR body 的程式碼區塊(```)裡有 Closes/Fixes/Resolves + #issue —— GitHub 不會解析。請移出區塊、改成純文字。'
+            bad=1
+          fi
+          [ "$bad" -eq 0 ] || exit 1
+          echo "✓ PR body 沒有被反引號吃掉的 Closes"
+
   # 固定名稱的彙總閘門。範例 matrix 是動態的,job 名稱會隨範例增減而變動,
   # 沒辦法直接拿去當 branch protection 的 required status check —— 這個可以。
   ci-ok:
     if: always()
-    needs: [discover, example]
+    needs: [discover, example, pr-closes-lint]
     # 名稱刻意與 job id 相同且維持 ASCII:required status check 是按這個顯示名稱
     # 比對的,改名等於讓 branch protection 靜靜失效(它會一直等一個永不出現的 check)。
     name: ci-ok
     runs-on: ubuntu-latest
     steps:
       - run: |
-          echo "discover=${{ needs.discover.result }}  example=${{ needs.example.result }}"
+          echo "discover=${{ needs.discover.result }}  example=${{ needs.example.result }}  pr-closes-lint=${{ needs['pr-closes-lint'].result }}"
           if [ "${{ needs.discover.result }}" != "success" ] || [ "${{ needs.example.result }}" != "success" ]; then
             echo "::error::有 job 未成功(含被取消 / 被略過)"
             exit 1
           fi
+          # pr-closes-lint 只在 pull_request 事件跑:push / dispatch 時是 skipped,
+          # 不算失敗;只有真的 failure / cancelled 才擋(否則 main 的 push CI 永遠紅)。
+          case "${{ needs['pr-closes-lint'].result }}" in
+            failure|cancelled)
+              echo "::error::pr-closes-lint 未通過 —— PR body 的 Closes 被反引號包住,merge 後 issue 不會自動關"
+              exit 1
+              ;;
+          esac
           echo "✓ 全部範例通過"

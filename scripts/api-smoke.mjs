@@ -118,25 +118,70 @@ if (used.size === 0) {
   );
 }
 
-// ── 閘門②:覆蓋率不得下降 ────────────────────────────────────────
-let baseline;
+// ── 閘門②:覆蓋率只增不減(棘輪)──────────────────────────────
+// 基線 sdkMethods 永不縮水:合法的「不再用某方法」必須在 removedSdkMethods
+// 以 {方法: 非空理由} 具名記錄才放行(比照 .NET PublicAPI.Shipped.txt 的做法)。
+// 為什麼:掃描「部分失效」時(呼叫被傳進函式後改名等),閘門①不會觸發;
+// 早期版本的錯誤訊息還附上可照抄的 JSON,照做就把覆蓋率永久降級而 CI 全綠。
+// 故這裡的每一條 die 訊息都改要求人工確認,絕不給可直接貼上的基線內容。
+let expectDecl;
 try {
-  baseline = JSON.parse(await readFile(join(dir, EXPECT), "utf8")).sdkMethods;
+  expectDecl = JSON.parse(await readFile(join(dir, EXPECT), "utf8"));
 } catch {
+  expectDecl = null;
+}
+const baseline = expectDecl?.sdkMethods;
+if (baseline === undefined) {
   die(
     `${rel(dir)} 的 ${EXPECT} 缺少 sdkMethods。每個用到 ${SDK} 的範例都要宣告預期的方法基線,\n` +
-      `  否則掃描漏了什麼沒人看得出來。依這次掃描結果,可直接寫入:\n\n` +
-      `  "sdkMethods": ${JSON.stringify([...used.keys()].sort())}\n`,
+      `  否則掃描漏了什麼沒人看得出來。請人工逐一對照範例原始碼實際呼叫了哪些方法,\n` +
+      `  再手動寫入 sdkMethods。本訊息刻意不給可照抄的清單:掃描可能部分失效,\n` +
+      `  照抄掃描結果等於把漏掃的方法永久排除在基線外。`,
   );
 }
 if (!Array.isArray(baseline)) die(`${rel(dir)}/${EXPECT} 的 sdkMethods 必須是陣列`);
 
+// removedSdkMethods(選填):{方法: 理由}。是「基線只增不減」的唯一合法出口。
+const removed = expectDecl.removedSdkMethods ?? {};
+if (typeof removed !== "object" || removed === null || Array.isArray(removed)) {
+  die(`${rel(dir)}/${EXPECT} 的 removedSdkMethods 必須是 {方法: 理由} 物件`);
+}
+for (const [m, reason] of Object.entries(removed)) {
+  if (typeof reason !== "string" || !reason.trim()) {
+    die(`${rel(dir)}/${EXPECT} 的 removedSdkMethods["${m}"] 理由必須是非空字串`);
+  }
+  if (!baseline.includes(m)) {
+    die(
+      `${rel(dir)}/${EXPECT} 的 removedSdkMethods["${m}"] 不在 sdkMethods 基線裡。\n` +
+        `  基線只增不減:除名靠 removedSdkMethods 記錄,不靠從 sdkMethods 刪除;\n` +
+        `  對不上基線的除名記錄沒有意義,請修正。`,
+    );
+  }
+  if (used.has(m)) {
+    die(
+      `${rel(dir)}/${EXPECT} 的 removedSdkMethods["${m}"] 已過時:這次仍掃得到該方法的呼叫(${used.get(m)})。\n` +
+        `  請移除這筆除名記錄 —— 留著它,未來真正的覆蓋率下降會被它預先豁免。`,
+    );
+  }
+}
+
 const dropped = baseline.filter((m) => !used.has(m));
-if (dropped.length) {
+const unexcused = [];
+for (const m of dropped) {
+  const reason = removed[m];
+  if (typeof reason === "string" && reason.trim()) {
+    console.log(`  · 方法 ${m} 已依 removedSdkMethods 除名:${reason}`);
+  } else {
+    unexcused.push(m);
+  }
+}
+if (unexcused.length) {
   die(
-    `覆蓋率下降:${EXPECT} 的 sdkMethods 宣告了 ${dropped.join(", ")},但這次掃不到。\n` +
-      `  若範例真的不再用這些方法,請一併更新 ${EXPECT};\n` +
-      `  否則就是掃描規則失效了(這正是本檢查要抓的東西)。`,
+    `覆蓋率下降:${EXPECT} 的 sdkMethods 宣告了 ${unexcused.join(", ")},但這次掃不到。\n` +
+      `  sdkMethods 是只增不減的棘輪。請先人工確認範例原始碼是否真的不再呼叫這些方法:\n` +
+      `  - 還在用 → 掃描規則失效了(這正是本檢查要抓的東西)——修偵測,別動基線。\n` +
+      `  - 真的不用了 → 在 ${EXPECT} 的 removedSdkMethods 加上 {"方法": "具名理由"} 留痕後才放行。\n` +
+      `  本訊息刻意不給可照抄的更新內容:照錯誤訊息改基線,正是本閘門要堵的繞過方式。`,
   );
 }
 
