@@ -3,8 +3,8 @@
 // mints short-lived, scoped-down tokens at /api/token.
 // The gateway / realtime URLs and the topic are non-sensitive, so Vite injects them (see .env.example).
 //
-// Multi-room: one topic is split into "rooms". Publishing targets a room via publish's key (?key),
-// subscribing passes room to receive only that room (?room). Which rooms are available is decided by
+// Multi-room: one topic is split into "rooms". Both directions pass { room } (SDK 0.2.0+):
+// publish targets that room, subscribe receives only that room. Which rooms are available is decided by
 // the rooms of the backend-minted token and enforced by the platform (overreach returns 403); the
 // frontend's VITE_MSGMESH_ROOMS is only used to draw the room menu — it is not an authorization boundary.
 //

@@ -30,7 +30,7 @@ Once the SDK has a token it caches it automatically, refetches before it expires
 
 ## Multiple rooms and isolation
 
-A `room` = a sub-channel under a single topic, physically the **Kafka record key**. On publish you tag the room with the key; on subscribe you use the room to receive only that room; which rooms are available is **decided by the token minted by the backend and enforced by the platform** — this is "true isolation", not reliant on the frontend being honest.
+A `room` = a sub-channel under a single topic, physically the **Kafka record key**. Both directions pass `{ room }` (SDK 0.2.0+): publish targets that room, subscribe receives only that room; which rooms are available is **decided by the token minted by the backend and enforced by the platform** — this is "true isolation", not reliant on the frontend being honest.
 
 Data flow (frontend room → token scope-down → subscribe/publish):
 

@@ -11,8 +11,8 @@
 //
 // Multi-room isolation: one topic is split into "rooms" (room = Kafka record key). When
 // MSGMESH_ROOMS is set, token minting scopes the capabilities' rooms down to "the rooms this user
-// may access" — the token can only publish (?key) / subscribe (?room) to those rooms; overreach gets
-// a 403 from the platform (true isolation, not reliant on the frontend being honest).
+// may access" — the token can only publish / subscribe to those rooms ({ room } in both
+// directions, SDK 0.2.0+); overreach gets a 403 from the platform (true isolation, not reliant on the frontend being honest).
 // To run: `npm run build` to produce dist/, then `node --env-file=.env server.js` (Node >= 20.6).
 
 import { createServer } from "node:http";
