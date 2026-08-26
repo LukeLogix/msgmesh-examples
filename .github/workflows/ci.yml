@@ -162,28 +162,77 @@ jobs:
     steps:
       - name: PR body 的 Closes 必須是純文字
         # PR body 是外部輸入,走 env 傳遞、不做 ${{ }} 內插進 script,避免注入。
+        # 檢查兩個方向:fenced ``` 區塊與 inline code span 裡的 Closes 要抓(GitHub 不解析,
+        # merge 後 issue 靜默不關);純文字位置的 Closes 不得因前後恰好各有一段 inline code
+        # 而誤判(單一 regex 會把前者的收尾反引號與後者的開頭反引號誤配成一個 span)。
+        # 做法:python3 標準庫先抽出程式碼區段(fenced 配對 + CommonMark 的 span 配對),
+        # 只對抽出的內容找關閉關鍵字 + #issue。
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           set -euo pipefail
           printf '%s\n' "$PR_BODY" > "$RUNNER_TEMP/pr-body.md"
-          bad=0
-          # 行內 code span:`Closes ...#N` 之類
-          if grep -Eiq '`[^`]*(clos(e|es|ed)|fix(es|ed)?|resolv(e|es|ed))[^`]*#[0-9]+[^`]*`' "$RUNNER_TEMP/pr-body.md"; then
-            echo '::error::PR body 有被反引號包住的 Closes/Fixes/Resolves + #issue —— GitHub 不會解析,merge 後 issue 不會自動關。請把那行改成純文字。'
-            bad=1
-          fi
-          # 圍欄程式碼區塊(```)裡的 Closes 同樣不會被解析
-          if awk '
-              /^[[:space:]]*```/ { fence = !fence; next }
-              fence { if (tolower($0) ~ /(close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)[^#]*#[0-9]+/) hit = 1 }
-              END { exit hit ? 0 : 1 }
-            ' "$RUNNER_TEMP/pr-body.md"; then
-            echo '::error::PR body 的程式碼區塊(```)裡有 Closes/Fixes/Resolves + #issue —— GitHub 不會解析。請移出區塊、改成純文字。'
-            bad=1
-          fi
-          [ "$bad" -eq 0 ] || exit 1
-          echo "✓ PR body 沒有被反引號吃掉的 Closes"
+          python3 - "$RUNNER_TEMP/pr-body.md" <<'PYEOF'
+          import re, sys
+
+          body = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+
+          # GitHub 的關閉關鍵字 + issue 參照(close/closes/closed/fix/fixes/fixed/resolve/resolves/
+          # resolved,後接可選冒號/空白、可選 owner/repo,再 #N)。只在「程式碼位置」出現才違規。
+          KW = re.compile(r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b[:\s]*[\w./-]*#[0-9]+", re.IGNORECASE)
+
+          codes = []  # (種類, 內容)
+
+          # 1) 圍欄區塊(``` 或 ~~~):逐行配對——開欄後找「同記號、至少同長」的收欄行;未收欄吃到文末
+          #    (GitHub 同樣把其後全部視為程式碼)。圍欄行本身移出純文字,免得反引號被當行內 span 起點。
+          plain_lines, buf = [], []
+          fence = None  # (記號字元, 記號長度)
+          for ln in body.split("\n"):
+              m = re.match(r"[ \t]*(`{3,}|~{3,})", ln)
+              if fence is None:
+                  if m:
+                      fence = (m.group(1)[0], len(m.group(1)))
+                      buf = []
+                  else:
+                      plain_lines.append(ln)
+              elif m and m.group(1)[0] == fence[0] and len(m.group(1)) >= fence[1]:
+                  codes.append(("fenced 區塊", "\n".join(buf)))
+                  fence = None
+              else:
+                  buf.append(ln)
+          if fence is not None:
+              codes.append(("fenced 區塊(未收欄)", "\n".join(buf)))
+
+          # 2) 行內 code span(圍欄以外的文字):CommonMark 配對——N 個反引號開、下一個「恰好 N 個」
+          #    反引號收,且不跨空行;配不上的反引號是字面字元。單一 regex 做不到這件事:
+          #    「`x` 文字 `y`」會被它把 x 的收尾反引號與 y 的開頭反引號誤配成一個 span,
+          #    把中間的純文字 Closes 吃進去(誤紅);逐一配對則不會。
+          plain = "\n".join(plain_lines)
+          runs = [(m.start(), m.end()) for m in re.finditer(r"`+", plain)]
+          i = 0
+          while i < len(runs):
+              length = runs[i][1] - runs[i][0]
+              closer = None
+              for j in range(i + 1, len(runs)):
+                  if re.search(r"\n[ \t]*\n", plain[runs[i][1]:runs[j][0]]):
+                      break  # code span 不跨空行(段落邊界)
+                  if runs[j][1] - runs[j][0] == length:
+                      closer = j
+                      break
+              if closer is None:
+                  i += 1
+                  continue
+              codes.append(("行內 code span", plain[runs[i][1]:runs[closer][0]]))
+              i = closer + 1
+
+          bad = [(kind, line) for kind, content in codes for line in content.split("\n") if KW.search(line)]
+          if bad:
+              for kind, line in bad:
+                  print("::error::PR body 的" + kind + "裡有關閉關鍵字 + #issue:" + repr(line.strip())
+                        + " —— GitHub 不解析程式碼裡的 Closes,merge 後 issue 不會自動關。請把那行移出程式碼、改成純文字。")
+              sys.exit(1)
+          print("OK:關閉關鍵字 + #issue 都在純文字位置(或不存在)。")
+          PYEOF
 
   # 固定名稱的彙總閘門。範例 matrix 是動態的,job 名稱會隨範例增減而變動,
   # 沒辦法直接拿去當 branch protection 的 required status check —— 這個可以。
