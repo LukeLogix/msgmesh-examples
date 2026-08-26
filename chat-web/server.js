@@ -85,7 +85,7 @@ function sendJSON(res, status, obj) {
 async function mintToken(res) {
   if (!API_KEY || API_KEY === "replace-me") {
     console.error("[token-broker] MSGMESH_API_KEY not set — cannot mint tokens (fill in .env)");
-    return sendJSON(res, 500, { error: "token broker not configured" });
+    return sendJSON(res, 500, { error: "token-broker not configured" });
   }
 
   let upstream;
@@ -102,7 +102,7 @@ async function mintToken(res) {
     // Cannot reach the control plane (wrong address / service down / network) — return 502,
     // details logged server-side only.
     console.error("[token-broker] failed to reach control plane:", err?.message || err);
-    return sendJSON(res, 502, { error: "token broker: cannot reach control plane" });
+    return sendJSON(res, 502, { error: "token-broker: cannot reach control plane" });
   }
 
   if (!upstream.ok) {
@@ -112,7 +112,7 @@ async function mintToken(res) {
     // (avoids leaking configuration details).
     const detail = await upstream.text().catch(() => "");
     console.error(`[token-broker] control plane responded ${upstream.status}: ${detail}`);
-    return sendJSON(res, 502, { error: `token broker: control plane error (${upstream.status})` });
+    return sendJSON(res, 502, { error: `token-broker: control plane error (${upstream.status})` });
   }
 
   let data;
@@ -120,7 +120,7 @@ async function mintToken(res) {
     data = await upstream.json();
   } catch {
     console.error("[token-broker] control plane returned non-JSON");
-    return sendJSON(res, 502, { error: "token broker: malformed control plane response" });
+    return sendJSON(res, 502, { error: "token-broker: malformed control plane response" });
   }
 
   // The SDK's getToken only needs { token, expires_in }; forward just these two fields.
