@@ -159,20 +159,63 @@ function start() {
   });
 }
 
+// The message value is a string — we publish JSON, so parse it first.
+function parseMessage(value) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return { text: value };
+  }
+}
+
+let session = 0; // bumps on every (re)subscribe, so a stale in-flight history fetch cannot render into the wrong room
+
 // subscribe opens one realtime subscription for the current transport and activeRoom,
-// reclaiming the previous one (if any). stream / streamWs share the same interface;
+// reclaiming the previous one (if any). It first fetches the recent backlog with history()
+// (SDK 0.2.0+) so a late joiner does not face a blank screen, then starts the live stream from the
+// cursor the history page handed back. stream / streamWs share the same interface;
 // the fourth argument { room } receives only that room; omit it to receive the whole topic.
-function subscribe() {
+async function subscribe() {
   stopStream?.();
+  stopStream = null;
+  const mySession = ++session;
+
+  // Backlog first: latest 50 messages of the topic / current room, rendered before going live.
+  // The backlog is a nice-to-have — a platform without the history endpoint (or a transient
+  // error) must not block the live chat, so failures only log and we go straight to the stream.
+  const backlogValues = new Set(); // raw values of the backlog, to drop the history/live overlap
+  let from; // resume cursor handed back by history(); guaranteed replayable when issued
+  if (typeof mq.history === "function") {
+    setStatus("Loading recent messages…", "pending");
+    try {
+      const page = await mq.history(
+        cfg.topic,
+        activeRoom ? { room: activeRoom, limit: 50 } : { limit: 50 },
+      );
+      if (mySession !== session) return; // switched room / transport while fetching
+      for (const m of page.messages) {
+        const payload = parseMessage(m.value);
+        addMessage(payload, payload.user === nameInput.value.trim());
+        backlogValues.add(m.value);
+      }
+      from = page.resume_from || undefined;
+    } catch (err) {
+      if (mySession !== session) return;
+      console.warn("history backlog unavailable, going straight to live:", err?.message || err);
+    }
+  }
 
   const onMessage = (data) => {
-    // The callback receives the message value string — we publish JSON, so parse it first.
-    let payload;
-    try {
-      payload = JSON.parse(data);
-    } catch {
-      payload = { text: data };
+    // Drop the overlap between backlog and live: delivery is at-least-once and the resume window
+    // deliberately overlaps, so a backlog message can arrive again from the stream. The stream
+    // callback exposes only the message value (not the platform id), so match on the exact value
+    // string of the backlog; each match is consumed, so a later, genuinely identical message
+    // (same user + text + ms timestamp would be required anyway) still renders.
+    if (backlogValues.size && backlogValues.has(data)) {
+      backlogValues.delete(data);
+      return;
     }
+    const payload = parseMessage(data);
     addMessage(payload, payload.user === nameInput.value.trim());
   };
   const onError = (err) => {
@@ -181,7 +224,11 @@ function subscribe() {
     // platform (403); everything else is mostly transient disconnects the SDK reconnects from.
     setStatus("Disconnected or room not authorized; the SDK reconnects automatically (see console).", "error");
   };
-  const opts = activeRoom ? { room: activeRoom } : undefined;
+  // from = history()'s resume_from: the live stream picks up right where the backlog ended,
+  // instead of starting "now" and missing whatever arrived in between.
+  const opts = {};
+  if (activeRoom) opts.room = activeRoom;
+  if (from) opts.from = from;
 
   // stream()/streamWs() return a stop function; no need to stop while the page lives,
   // but switching room / transport must stop the old subscription first.

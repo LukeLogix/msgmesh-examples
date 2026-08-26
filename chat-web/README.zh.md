@@ -8,6 +8,7 @@
 
 - **收**:`@msgmesh/sdk` 的 [`stream()`](https://www.npmjs.com/package/@msgmesh/sdk)(SSE,瀏覽器原生 `EventSource`,連 `GET {realtime}/v1/topics/{topic}/sse`);或 `streamWs()`(WebSocket,同介面)。兩者都可傳選用 `{ room }` 只收某房間。
 - **發**:`publish()` —— `POST {gateway}/v1/topics/{topic}/messages`,送出 `{ user, text, ts }` JSON;用 `{ room }` 指定房間。
+- **補歷史**:進場與每次切房都先用 `history()`(SDK 0.2.0+)撈最近 50 則畫出來,晚到的人不會面對空白畫面;即時串流再從 history 回傳的 `resume_from` 游標接力,重疊部分自動去重。
 - **鑑權**:前端不放 key,改用 SDK 的 `getToken` 向後端 `/api/token` 領短期 token(見下方「token-broker」)。token 的能力已被後端**降權到該使用者可用的房間**,平台強制(見「多房間與隔離」)。
 
 ## token-broker 是什麼
