@@ -42,7 +42,7 @@ let useWs = params.get("transport") === "ws";
 // without re-minting on every switch.
 async function getToken() {
   const r = await fetch("/api/token", { method: "POST" });
-  if (!r.ok) throw new Error("token broker " + r.status);
+  if (!r.ok) throw new Error("token-broker " + r.status);
   return r.json();
 }
 
