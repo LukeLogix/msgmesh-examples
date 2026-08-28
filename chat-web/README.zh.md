@@ -8,7 +8,7 @@
 
 - **收**:`@msgmesh/sdk` 的 [`stream()`](https://www.npmjs.com/package/@msgmesh/sdk)(SSE,瀏覽器原生 `EventSource`,連 `GET {realtime}/v1/topics/{topic}/sse`);或 `streamWs()`(WebSocket,同介面)。兩者都可傳選用 `{ room }` 只收某房間。
 - **發**:`publish()` —— `POST {gateway}/v1/topics/{topic}/messages`,送出 `{ user, text, ts }` JSON;用 `{ room }` 指定房間。
-- **補歷史**:進場與每次切房都先用 `history()`(SDK 0.2.0+)撈最近 50 則畫出來,晚到的人不會面對空白畫面;即時串流再從 history 回傳的 `resume_from` 游標接力,重疊部分自動去重。
+- **補歷史**:進場與每次切房都先用 `history()`(SDK 0.2.0+)撈最近 50 則畫出來,晚到的人不會面對空白畫面;即時串流再從 history 回傳的 `resume_from` 游標接力,重疊部分**按訊息 id 去重**(SDK 0.3.0+,見「補歷史與 history / 直播的接縫」)。
 - **鑑權**:前端不放 key,改用 SDK 的 `getToken` 向後端 `/api/token` 領短期 token(見下方「token-broker」)。token 的能力已被後端**降權到該使用者可用的房間**,平台強制(見「多房間與隔離」)。
 
 ## token-broker 是什麼
@@ -51,7 +51,7 @@ SDK 拿到 token 後會自動快取、於將過期前重取、SSE 重連時換�
 - **不想分房間**:留空 `MSGMESH_ROOMS` 與 `VITE_MSGMESH_ROOMS`,`rooms` 省略 = 不限房間 = 單一大廳,行為同舊版。
 - **只有 realtime 能 per-room**:SSE / WS 訂閱可帶 `?room=` 精準收單一房間;但 poll / consume(長輪詢整個 topic)是 **firehose**,room-scoped 憑證用不了(平台回 403)——細顆粒房間請走 realtime。詳見 [`agent-notifier/README.zh.md`](../agent-notifier/README.zh.md)。
 
-> 版本註記:收發兩端現在同一個詞。發佈端 `publish(…, { room })` 需 `@msgmesh/sdk` **0.2.0 以上** —— 0.2.0 之前這個選項叫 `key`,而 0.2.0 若仍傳 `key` 會直接丟錯(不會靜默把房間路由丟掉)。**訂閱端 `stream`/`streamWs` 的 `{ room }` 過濾**自 0.1.4 起支援。故 `package.json` 要求 `^0.2.0`。
+> 版本註記:收發兩端現在同一個詞。發佈端 `publish(…, { room })` 需 `@msgmesh/sdk` **0.2.0 以上** —— 0.2.0 之前這個選項叫 `key`,而 0.2.0 若仍傳 `key` 會直接丟錯(不會靜默把房間路由丟掉)。**訂閱端 `stream`/`streamWs` 的 `{ room }` 過濾**自 0.1.4 起支援。`package.json` 則要求再高一個小版的 `^0.3.0`,因為補歷史的接縫改用訊息 id 去重(見下下節)。
 
 ## 用 WebSocket 收(streamWs)
 
@@ -67,6 +67,32 @@ mq.streamWs(topic, onMsg, onErr, { room });
 適合 SSE 被中間層(proxy / 防火牆)擋掉、或你已有 WebSocket 基礎設施的場景。`streamWs` 用瀏覽器原生 `WebSocket`(所有現代瀏覽器皆內建;Node 端則需 ≥ 22 或改用 `subscribe` 長輪詢)。標題列的 `SSE` / `WS` 徽章會顯示目前用哪一種。
 
 `@msgmesh/sdk` 0.1.7 起,`streamWs`(與 `stream` 一樣)**跨重連續傳、不漏訊息**:斷線期間漏掉的訊息會在重連時補回(at-least-once,依游標去重)——聊天短暫離線期間別人發的訊息不會漏。全自動、透明,無需改碼。
+
+## 補歷史與 history / 直播的接縫
+
+進場與每次切房,範例都先用 `history()` 回放一批歷史,再從那頁回傳的 `resume_from` 游標接上直播。投遞是 at-least-once、續傳視窗又刻意重疊,所以剛從歷史畫出來的訊息可能再從直播送來一次。範例**按訊息 id** 丟掉這段重疊:
+
+```js
+const backlogIds = new Set();
+const page = await mq.history(topic, { room, limit: 50 });
+for (const m of page.messages) {
+  render(m.value);
+  backlogIds.add(m.id);          // "<partition>-<offset>"
+}
+
+// SDK 0.3.0+:onMessage 的第二個參數帶訊息座標。
+mq.stream(topic, (value, meta) => {
+  if (meta && backlogIds.has(meta.id)) return;   // 歷史已經畫過了
+  render(value);
+}, onError, { room, from: page.resume_from });
+```
+
+`meta` 是 `{ id, partition, offset }`,而 `meta.id` 與 `history()` 掛在每則訊息上的 `<partition>-<offset>` 逐字元相同——一個 `Set` 就跨得過接縫。第二個參數是加法式的:只宣告 `(value)` 的回呼照舊能跑。
+
+兩個值得照抄的細節:
+
+- **別用比對訊息原文去重。** 0.3.0 之前只能這樣做,而它在真實流量上是錯的:兩則內容剛好一模一樣、實際上不同的訊息——心跳、狀態回報、重試——會被當成同一則,使用者只看到一行。id 唯一,原文不唯一。
+- **想清楚 `meta` 是 `undefined` 時怎麼辦。** 當這一幀沒有可解析的 id(非 msgmesh 的伺服器,或落在續傳信封之外的 WS 幀),SDK 就不給 `meta`。本範例選擇**照樣畫出來**:反正它跟歷史也對不起來,偶爾多顯示一則遠好過靜靜吞掉一則真訊息——這與 SDK 自己 per-partition 去重的「失敗時放行」是同一個選擇。
 
 ## 跑起來
 
