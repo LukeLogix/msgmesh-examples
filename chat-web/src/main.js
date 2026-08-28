@@ -141,7 +141,8 @@ function start() {
   // key and checks the token's rooms — outside the allow-set returns 403). The message flows back
   // through the subscription and onMessage renders it (including our own).
   // Both directions use the same word, room: subscribe passes { room }, publish passes { room }
-  // (SDK 0.2.0+; earlier versions called this option key, hence package.json requires ^0.2.0).
+  // (SDK 0.2.0+; earlier versions called this option key). package.json requires ^0.3.0, the
+  // version that added onMessage's meta argument — see subscribe() for what it buys.
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const text = textInput.value.trim();
@@ -173,7 +174,8 @@ let session = 0; // bumps on every (re)subscribe, so a stale in-flight history f
 // subscribe opens one realtime subscription for the current transport and activeRoom,
 // reclaiming the previous one (if any). It first fetches the recent backlog with history()
 // (SDK 0.2.0+) so a late joiner does not face a blank screen, then starts the live stream from the
-// cursor the history page handed back. stream / streamWs share the same interface;
+// cursor the history page handed back, deduping the overlap by message id (SDK 0.3.0+).
+// stream / streamWs share the same interface;
 // the fourth argument { room } receives only that room; omit it to receive the whole topic.
 async function subscribe() {
   stopStream?.();
@@ -183,7 +185,7 @@ async function subscribe() {
   // Backlog first: latest 50 messages of the topic / current room, rendered before going live.
   // The backlog is a nice-to-have — a platform without the history endpoint (or a transient
   // error) must not block the live chat, so failures only log and we go straight to the stream.
-  const backlogValues = new Set(); // raw values of the backlog, to drop the history/live overlap
+  const backlogIds = new Set(); // ids of the backlog messages, to drop the history/live overlap
   let from; // resume cursor handed back by history(); guaranteed replayable when issued
   if (typeof mq.history === "function") {
     setStatus("Loading recent messages…", "pending");
@@ -196,7 +198,7 @@ async function subscribe() {
       for (const m of page.messages) {
         const payload = parseMessage(m.value);
         addMessage(payload, payload.user === nameInput.value.trim());
-        backlogValues.add(m.value);
+        backlogIds.add(m.id);
       }
       from = page.resume_from || undefined;
     } catch (err) {
@@ -205,16 +207,21 @@ async function subscribe() {
     }
   }
 
-  const onMessage = (data) => {
+  // onMessage receives the message value and its coordinates: (value, meta), where meta is
+  // { id, partition, offset } (SDK 0.3.0+). meta.id is byte-for-byte the same "<partition>-<offset>"
+  // that history() puts on every message, so one Set of ids spans the history/live seam.
+  const onMessage = (data, meta) => {
     // Drop the overlap between backlog and live: delivery is at-least-once and the resume window
-    // deliberately overlaps, so a backlog message can arrive again from the stream. The stream
-    // callback exposes only the message value (not the platform id), so match on the exact value
-    // string of the backlog; each match is consumed, so a later, genuinely identical message
-    // (same user + text + ms timestamp would be required anyway) still renders.
-    if (backlogValues.size && backlogValues.has(data)) {
-      backlogValues.delete(data);
-      return;
-    }
+    // deliberately overlaps, so a backlog message can arrive again from the stream. Matching by
+    // meta.id is exact. (Comparing message bodies, which is all that was possible before 0.3.0,
+    // cannot tell two genuinely identical messages apart — heartbeats, status pings and retries
+    // are routinely byte-identical — and swallows one of them.)
+    //
+    // Fallback when meta is undefined — the frame carried no parseable id (a non-msgmesh server,
+    // or a WS frame outside the resume envelope): render the message. It cannot be matched against
+    // the backlog either way, and showing a rare duplicate beats silently dropping a real message.
+    // This is the same fail-open choice the SDK makes for its own per-partition dedupe.
+    if (meta && backlogIds.has(meta.id)) return;
     const payload = parseMessage(data);
     addMessage(payload, payload.user === nameInput.value.trim());
   };

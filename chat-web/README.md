@@ -8,7 +8,7 @@ This template **uses a token-broker by default**: no long-lived key in the front
 
 - **Receive**: `@msgmesh/sdk`'s [`stream()`](https://www.npmjs.com/package/@msgmesh/sdk) (SSE, the browser-native `EventSource`, connecting to `GET {realtime}/v1/topics/{topic}/sse`); or `streamWs()` (WebSocket, same interface). Both take an optional `{ room }` to receive only one room.
 - **Send**: `publish()` — `POST {gateway}/v1/topics/{topic}/messages`, sending `{ user, text, ts }` JSON; use `{ room }` to specify the room.
-- **Backlog**: on join and on every room switch, `history()` (SDK 0.2.0+) first fetches the latest 50 messages so a late joiner does not face a blank screen, then the live stream resumes from the `resume_from` cursor the history page handed back, with the overlap deduped.
+- **Backlog**: on join and on every room switch, `history()` (SDK 0.2.0+) first fetches the latest 50 messages so a late joiner does not face a blank screen, then the live stream resumes from the `resume_from` cursor the history page handed back, with the overlap deduped **by message id** (SDK 0.3.0+ — see "Backlog and the history / live seam").
 - **Authentication**: the frontend holds no key and instead uses the SDK's `getToken` to obtain a short-lived token from the backend `/api/token` (see "token-broker" below). The token's capabilities have already been **scoped down by the backend to the rooms this user may access**, enforced by the platform (see "Multiple rooms and isolation").
 
 ## What the token-broker is
@@ -52,7 +52,7 @@ Data flow (frontend room → token scope-down → subscribe/publish):
 - **Don't want rooms at all**: leave `MSGMESH_ROOMS` and `VITE_MSGMESH_ROOMS` empty; omitting `rooms` = no room restriction = a single lobby, behaving like the older version.
 - **Only realtime supports per-room**: an SSE / WS subscription can carry `?room=` to precisely receive a single room; but poll / consume (long-polling the whole topic) is a **firehose** where room-scoped credentials don't work (the platform returns 403) — for fine-grained rooms, use realtime. See [`agent-notifier/README.md`](../agent-notifier/README.md) for details.
 
-> Version note: both sides now use the same word. `publish(…, { room })` requires `@msgmesh/sdk` **0.2.0 or newer** — before 0.2.0 that option was called `key`, and 0.2.0 throws if you still pass `key` rather than silently dropping the routing. The **subscribe-side `{ room }` filtering of `stream`/`streamWs`** has been supported since 0.1.4. `package.json` therefore requires `^0.2.0`.
+> Version note: both sides now use the same word. `publish(…, { room })` requires `@msgmesh/sdk` **0.2.0 or newer** — before 0.2.0 that option was called `key`, and 0.2.0 throws if you still pass `key` rather than silently dropping the routing. The **subscribe-side `{ room }` filtering of `stream`/`streamWs`** has been supported since 0.1.4. `package.json` requires `^0.3.0`, one minor higher, because the backlog seam dedupes by message id (next section but one).
 
 ## Receiving over WebSocket (streamWs)
 
@@ -68,6 +68,32 @@ mq.streamWs(topic, onMsg, onErr, { room });
 Good for cases where SSE is blocked by an intermediary (proxy / firewall), or where you already have WebSocket infrastructure. `streamWs` uses the browser-native `WebSocket` (built into all modern browsers; on Node it needs ≥ 22, or switch to `subscribe` long-polling). The `SSE` / `WS` badge in the title bar shows which one is currently in use.
 
 Since `@msgmesh/sdk` 0.1.7, `streamWs` (like `stream`) **resumes across reconnects with no gaps**: messages dropped during a disconnect are backfilled on reconnect (at-least-once, deduped by cursor) — a chat client won't miss messages sent while it was briefly offline. This is automatic and transparent; no code change.
+
+## Backlog and the history / live seam
+
+On join and on every room switch the example replays a backlog with `history()`, then joins the live stream at the `resume_from` cursor that page handed back. Delivery is at-least-once and the resume window deliberately overlaps, so a message already drawn from the backlog can arrive a second time from the stream. The example drops that overlap **by message id**:
+
+```js
+const backlogIds = new Set();
+const page = await mq.history(topic, { room, limit: 50 });
+for (const m of page.messages) {
+  render(m.value);
+  backlogIds.add(m.id);          // "<partition>-<offset>"
+}
+
+// SDK 0.3.0+: onMessage's second argument carries the message's coordinates.
+mq.stream(topic, (value, meta) => {
+  if (meta && backlogIds.has(meta.id)) return;   // already drawn from the backlog
+  render(value);
+}, onError, { room, from: page.resume_from });
+```
+
+`meta` is `{ id, partition, offset }`, and `meta.id` is byte-for-byte the same `<partition>-<offset>` string `history()` puts on every message — so one `Set` of ids spans the seam. The second argument is additive: a callback declaring only `(value)` keeps working.
+
+Two details worth copying:
+
+- **Do not dedupe by comparing message bodies.** That was the only option before 0.3.0, and it is wrong on real traffic: two genuinely different messages that happen to be byte-identical — heartbeats, status pings, retries — get read as one and the user is shown a single line. Ids are unique; bodies are not.
+- **Decide what happens when `meta` is `undefined`.** The SDK omits it when a frame carried no parseable id (a non-msgmesh server, or a WS frame outside the resume envelope). This example **renders the message**: it cannot be matched against the backlog either way, and showing a rare duplicate beats silently dropping a real one — the same fail-open choice the SDK makes for its own per-partition dedupe.
 
 ## Run it
 
