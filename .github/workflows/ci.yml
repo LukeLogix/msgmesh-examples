@@ -122,12 +122,23 @@ jobs:
       # (start() 在 let mq 之前跑,TDZ 丟 ReferenceError,停在「Initializing…」)。
       # 裝得起來 / 建得出來 / 方法名還在,三者都不代表「打開來會動」。
       # 這步用 headless Chrome 真的載入一次,任何未捕捉例外就紅。不需要憑證。
+      #
+      # 只在 matrix 最新的 Node 上跑。兩個理由:① 這道驗的是**瀏覽器**行為,跟建置
+      # 用哪個 Node 無關,跑兩次是重複的;② 腳本用 Node 內建的全域 WebSocket 講
+      # CDP,那是 Node 21 才有的(20 直接 ReferenceError)。
+      # ⚠️ 動 matrix.node 時要一起動這裡的版本號,否則這道關卡會靜靜地一次都不跑。
+      #    另一個組合會印出略過訊息,就是為了讓「都沒跑」在 log 裡看得見。
       - uses: browser-actions/setup-chrome@v1
+        if: matrix.node == 22
         id: chrome
       - name: 頁面載入冒煙(未捕捉例外 = 紅)
+        if: matrix.node == 22
         env:
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
         run: node ../scripts/load-smoke.mjs
+      - name: 頁面載入冒煙(本組合不跑)
+        if: matrix.node != 22
+        run: echo "· node ${{ matrix.node }}:頁面載入冒煙只跑在 matrix 最新的 Node(需要 Node ≥ 21 的全域 WebSocket)。本組合略過 —— 略過不等於通過。"
 
   # 諮詢性質,刻意獨立成一個 job 且不列入 ci-ok:範例釘在舊版 SDK 可能是刻意的,
   # 落後一版不是缺陷。但必須看得見,否則公開範例會安靜地爛掉。

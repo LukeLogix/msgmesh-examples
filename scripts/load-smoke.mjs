@@ -19,6 +19,14 @@ import { tmpdir } from 'node:os';
 const cwd = process.cwd();
 const name = cwd.split('/').pop();
 
+// CDP 走 WebSocket,而全域 WebSocket 是 Node 21 才有的(20 會在建立連線那行丟
+// ReferenceError)。在這裡就講清楚,別讓人對著堆疊追一個環境問題。
+if (typeof WebSocket === 'undefined') {
+  console.error(`✗ 這個 Node(${process.version})沒有全域 WebSocket,CDP 連不上。`);
+  console.error('  load-smoke 需要 Node ≥ 21。CI 只在 matrix 最新的 Node 上跑這一步。');
+  process.exit(1);
+}
+
 // ── 沒有頁面的範例(agent-notifier 之類的純腳本)明確跳過,不是靜默通過 ──────────
 const expectPath = join(cwd, '.ci-expect.json');
 if (!existsSync(expectPath)) {
