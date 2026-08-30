@@ -109,13 +109,6 @@ function renderTransport() {
 // When the URL config is incomplete, say so on screen instead of connecting anyway
 // (avoids a pile of cryptic console errors). The token comes from the backend /api/token, so the
 // frontend never sees the key; whether the token-broker is up is reported when the SDK calls it.
-if (!cfg.gatewayUrl || !cfg.realtimeUrl) {
-  setStatus("Not configured: copy .env.example to .env, fill in the gateway/realtime URLs, then rebuild.", "error");
-  sendBtn.disabled = true;
-} else {
-  start();
-}
-
 let mq;
 let stopStream = null; // stop function of the current subscription (stop the old one before switching room / transport)
 
@@ -262,4 +255,18 @@ function switchRoom(room) {
   messagesEl.textContent = "";
   renderRooms();
   subscribe();
+}
+
+// ── Bootstrap — keep this LAST in the file ───────────────────────────────────
+// `function` declarations hoist, so calling start() from higher up "works"; `let` does not.
+// Starting the app before the module has finished evaluating means any `let` declared below the
+// call site (mq, stopStream, session…) is still in its temporal dead zone, and the first access
+// throws "Cannot access 'x' before initialization". The page then dies on load with the status
+// stuck at "Initializing…" and nothing in the network tab — it never got as far as a request.
+// Running the bootstrap last makes that whole class of bug impossible, so do not move it up.
+if (!cfg.gatewayUrl || !cfg.realtimeUrl) {
+  setStatus("Not configured: copy .env.example to .env, fill in the gateway/realtime URLs, then rebuild.", "error");
+  sendBtn.disabled = true;
+} else {
+  start();
 }

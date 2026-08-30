@@ -118,6 +118,17 @@ jobs:
       - name: SDK API 冒煙
         run: node ../scripts/api-smoke.mjs
 
+      # 上面每一步都通過,頁面仍可能一載入就死 —— chat-web 就這樣在 main 上壞了六週
+      # (start() 在 let mq 之前跑,TDZ 丟 ReferenceError,停在「Initializing…」)。
+      # 裝得起來 / 建得出來 / 方法名還在,三者都不代表「打開來會動」。
+      # 這步用 headless Chrome 真的載入一次,任何未捕捉例外就紅。不需要憑證。
+      - uses: browser-actions/setup-chrome@v1
+        id: chrome
+      - name: 頁面載入冒煙(未捕捉例外 = 紅)
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+        run: node ../scripts/load-smoke.mjs
+
   # 諮詢性質,刻意獨立成一個 job 且不列入 ci-ok:範例釘在舊版 SDK 可能是刻意的,
   # 落後一版不是缺陷。但必須看得見,否則公開範例會安靜地爛掉。
   # 直接讀 lockfile 而不安裝 —— lockfile 鎖到什麼版本,使用者 npm ci 就拿到什麼版本。
