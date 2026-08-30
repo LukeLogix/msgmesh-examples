@@ -12,7 +12,7 @@
 // 用法:node ../scripts/load-smoke.mjs        (cwd = 範例目錄)
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { existsSync, readFileSync, mkdtempSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, mkdtempSync, statSync, rmSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -35,6 +35,25 @@ if (!expect.buildsTo) {
 // 位址刻意用 127.0.0.1:9(discard port,必定連不上):憑證不需要,而且能證明
 // 「連不上」是被處理的路徑,不是讓頁面炸掉的原因。
 const out = mkdtempSync(join(tmpdir(), 'load-smoke-'));
+
+// ── 唯一的收尾路徑 ─────────────────────────────────────────────────────────────
+// 掛在 process.on('exit') 上,所以**每一條**離開路徑都會經過它——包含失敗時的
+// process.exit(1)。這很重要:第一版只在成功路徑尾端呼叫 proc.kill(),紅燈那次就漏
+// 了一個 headless Chrome(實測到 PPID=1 的孤兒還佔著除錯埠)。GitHub 託管 runner
+// 用完即丟看不出來,但我們的 CI 跑在自架機器上,每次紅燈漏一個會一路累積。
+let chromeProc = null, socket = null, httpServer = null;
+function cleanup() {
+  try { socket?.close(); } catch {}
+  try { httpServer?.close(); } catch {}
+  // detached:true 讓 Chrome 自成 process group;殺整個 group(負號)才連 renderer
+  // 一起收掉。只殺 spawn 回來的那個 pid,browser 進程會脫離成孤兒。
+  if (chromeProc?.pid) { try { process.kill(-chromeProc.pid, 'SIGKILL'); } catch {} }
+  try { rmSync(out, { recursive: true, force: true }); } catch {}
+}
+process.on('exit', cleanup);
+// 被 Ctrl-C / CI 取消時也要收:預設的信號處置會直接終結進程,不跑 exit handler。
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(130));
+
 const DEAD = 'http://127.0.0.1:9';
 const build = spawnSync('npx', ['vite', 'build', '--outDir', out, '--emptyOutDir'], {
   cwd, encoding: 'utf8',
@@ -50,7 +69,7 @@ if (build.status !== 0) {
 // ── 零依賴靜態伺服器 ────────────────────────────────────────────────────────────
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
                '.json': 'application/json', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
-const server = createServer((req, res) => {
+httpServer = createServer((req, res) => {
   const p = resolve(out, '.' + decodeURIComponent(req.url.split('?')[0]));
   // 目錄(含 `/`)一律回 index.html —— existsSync 對目錄也回 true,少了 isFile 會讀目錄而 EISDIR。
   const isFile = existsSync(p) && statSync(p).isFile();
@@ -59,8 +78,8 @@ const server = createServer((req, res) => {
   res.writeHead(200, { 'content-type': MIME[extname(f)] || 'application/octet-stream' });
   res.end(readFileSync(f));
 });
-await new Promise(r => server.listen(0, '127.0.0.1', r));
-const url = `http://127.0.0.1:${server.address().port}/`;
+await new Promise(r => httpServer.listen(0, '127.0.0.1', r));
+const url = `http://127.0.0.1:${httpServer.address().port}/`;
 
 // ── headless Chrome ────────────────────────────────────────────────────────────
 const CANDIDATES = [
@@ -75,17 +94,19 @@ if (!chrome) {
   process.exit(1);
 }
 const port = 9500 + (process.pid % 400);
-const proc = spawn(chrome, ['--headless=new', `--remote-debugging-port=${port}`, '--no-sandbox',
-  '--no-first-run', '--disable-gpu', `--user-data-dir=${out}/.chrome`, 'about:blank'], { stdio: 'ignore' });
+chromeProc = spawn(chrome, ['--headless=new', `--remote-debugging-port=${port}`, '--no-sandbox',
+  '--no-first-run', '--disable-gpu', `--user-data-dir=${out}/.chrome`, 'about:blank'],
+  { stdio: 'ignore', detached: true });   // detached → 自成 process group,cleanup 才殺得乾淨
 
 let ver;
 for (let i = 0; i < 40 && !ver; i++) {
   await new Promise(r => setTimeout(r, 250));
   try { ver = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json(); } catch {}
 }
-if (!ver) { console.error('✗ Chrome 起不來(DevTools 端點無回應)'); proc.kill(); process.exit(1); }
+if (!ver) { console.error('✗ Chrome 起不來(DevTools 端點無回應)'); process.exit(1); }
 
 const ws = new WebSocket(ver.webSocketDebuggerUrl);
+socket = ws;
 await new Promise(r => (ws.onopen = r));
 let id = 0; const pend = new Map(); const errors = [];
 ws.onmessage = e => {
@@ -114,7 +135,7 @@ const probe = await send('Runtime.evaluate', {
 }, sessionId);
 const { status } = JSON.parse(probe.result.value);
 
-ws.close(); proc.kill(); server.close();
+// 收尾統一交給 process.on('exit') 的 cleanup(),這裡不再各自關。
 
 let ok = true;
 // ① 未捕捉例外 = 頁面在載入時死掉
