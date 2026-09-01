@@ -11,14 +11,14 @@
 | 資料夾 | 是什麼 | 用到的 SDK | 房間(room) |
 | --- | --- | --- | --- |
 | [`chat-web/`](./chat-web) | 瀏覽器即時聊天室(Vite + 原生 JS,無框架) | `stream()`(SSE)/ `streamWs()`(WebSocket)收、`publish()` 發 | ✅ per-room(token 降權 `rooms` + 平台強制隔離) |
-| [`agent-notifier/`](./agent-notifier) | 監看事件的 Node 腳本 —— 給 AI agent / 後端的「事件層」 | `subscribe()` 長輪詢處理每一則事件 | ⛔ firehose(整個 topic;room-scoped 憑證用不了) |
+| [`agent-notifier/`](./agent-notifier) | 監看事件的 Node 腳本 —— 給 AI agent / 後端的「事件層」 | `subscribe()` 長輪詢對事件流做出反應(at-most-once,見其 README) | ⛔ firehose(整個 topic;room-scoped 憑證用不了) |
 
 ### 房間(room)適用於哪些接入
 
 `room` = 同一個 topic 底下的子頻道(實體 = Kafka record key)。發佈用 `publish(topic, body, { room })` 標記房間;**能不能只收某房間,取決於接入類型**:
 
 - **Realtime(SSE `stream` / WebSocket `streamWs`)** 可 **per-room**:訂閱傳 `{ room }` 只收該房間;搭配後端 token-broker 把 token 的 `rooms` 降權到「該使用者可用房間」,平台強制隔離(逾越 403)。見 `chat-web`。
-- **Poll / consume(`subscribe` 長輪詢)** 是 **firehose**:吃整個 topic 的每一則,不做房間過濾;room-scoped 憑證呼叫會被 **403**。整租戶消費請用**不限房間**的 key,自行讀 `msg.room` 分流。見 `agent-notifier`。
+- **Poll / consume(`subscribe` 長輪詢)** 是 **firehose**:吃整個 topic(不分房間)的事件流,不做房間過濾;room-scoped 憑證呼叫會被 **403**。整租戶消費請用**不限房間**的 key,自行讀 `msg.room` 分流。見 `agent-notifier`。
 
 ## 共同前置
 

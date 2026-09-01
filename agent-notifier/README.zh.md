@@ -9,12 +9,12 @@
 
 ## poll/consume 是 firehose —— 房間(room)在這裡用不了
 
-`subscribe()`(以及底層的 poll / consume)吃的是**整個 topic** 的 firehose:靠 consumer-group offset 消費全部分區,每則由 group 中單一 consumer 處理(at-least-once,靠 consumer-group 分攤)。它**不做房間(room)過濾**,原因是本質衝突:
+`subscribe()`(以及底層的 poll / consume)吃的是**整個 topic** 的 firehose:靠 consumer-group offset 消費全部分區,每則由 group 中單一 consumer 處理(分攤消費;投遞語義是 **at-most-once**——取到一批時位移即前進,回應途中遺失的訊息不會補送。需要硬性 at-least-once 處理請改用 webhook 或 SSE/WS)。它**不做房間(room)過濾**,原因是本質衝突:
 
 - consumer-group 的 offset 是「整個 topic」的進度,per-room 過濾會把別房間的訊息一併吃掉又丟棄,offset 照樣前進 → 漏訊。
 - 若「每房一個 group」硬做隔離,等於每個房間都把整個 topic 讀一遍(讀取放大),完全不划算。
 
-因此平台對此類「整 topic 讀」直接把關:**room-scoped 憑證(token 的 `rooms` 非空)呼叫 poll/consume 會被回 403**。這支範例要用**不限房間**的 key(consumer/subscribe 能力、`rooms` 空 = 全房間)——它本來就是要吃整個 topic 的每一則事件。
+因此平台對此類「整 topic 讀」直接把關:**room-scoped 憑證(token 的 `rooms` 非空)呼叫 poll/consume 會被回 403**。這支範例要用**不限房間**的 key(consumer/subscribe 能力、`rooms` 空 = 全房間)——它本來就是要吃整個 topic 的事件流。
 
 - **要 per-room 即時處理**(只處理某個房間的事件):走 **realtime**——SSE `stream(topic, …, { room })` 或 WebSocket `streamWs(topic, …, { room })`(見 [`chat-web`](../chat-web))。realtime 是共享的 live-tail,per-room 過濾便宜。
 - **後端 worker 要整租戶消費**(把某租戶所有房間的事件都收下來做 DB / 下游):就用**不限房間**的 key(如本範例),一條 `subscribe` 吃整個 topic,自己在 `handleEvent` 裡讀 `msg.room`(= 房間)分流即可。

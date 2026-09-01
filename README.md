@@ -11,7 +11,7 @@ Fill in your gateway / realtime URL and an API key, and within minutes you'll ha
 | Folder | What it is | SDK used | Room |
 | --- | --- | --- | --- |
 | [`chat-web/`](./chat-web) | Browser-based realtime chat room (Vite + vanilla JS, no framework) | `stream()` (SSE) / `streamWs()` (WebSocket) to receive, `publish()` to send | ✅ per-room (scoped-down token `rooms` + platform-enforced isolation) |
-| [`agent-notifier/`](./agent-notifier) | A Node script that watches events — the "event layer" for AI agents / backends | `subscribe()` long-polling to process every event | ⛔ firehose (the whole topic; room-scoped credentials won't work) |
+| [`agent-notifier/`](./agent-notifier) | A Node script that watches events — the "event layer" for AI agents / backends | `subscribe()` long-polling to react to the event stream (at-most-once — see its README) | ⛔ firehose (the whole topic; room-scoped credentials won't work) |
 
 ### Which integrations support rooms
 
