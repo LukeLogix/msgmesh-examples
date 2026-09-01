@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Subscribe to a MsgMesh topic and handle every event — an event-layer starter for AI agents / backends.",
+  "description": "Subscribe to a MsgMesh topic and handle every event \u2014 an event-layer starter for AI agents / backends.",
   "license": "MIT",
   "engines": {
     "node": ">=20.6.0"
@@ -12,6 +12,6 @@
     "start": "node --env-file=.env index.js"
   },
   "dependencies": {
-    "@msgmesh/sdk": "^0.2.0"
+    "@msgmesh/sdk": "^0.4.0"
   }
 }
