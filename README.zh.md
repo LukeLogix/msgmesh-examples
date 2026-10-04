@@ -4,7 +4,7 @@
 
 **MsgMesh** 的官方範例／樣板集合 —— 每個資料夾都是一個「`clone` 就能跑」的最小起手式,示範如何用官方 SDK [`@msgmesh/sdk`](https://www.npmjs.com/package/@msgmesh/sdk) 接入 MsgMesh 這個多租戶事件總線,收發即時事件。
 
-填上你的 gateway / realtime URL 與一把 API key,幾分鐘內就有一個能收發訊息的應用。
+填上一把 API key 與服務網址、建好範例要用的 topic,幾分鐘內就有一個能收發訊息的應用。
 
 ## 樣板
 
@@ -22,13 +22,15 @@
 
 ## 共同前置
 
-1. **一個跑著的 MsgMesh 實例。** 把各樣板 `.env` 裡的 gateway / realtime / control-plane URL 指向你的實例——你**自架**的,或你 **hosted 帳號**的位址(在面板註冊即可拿到,見下）。本機自架時各服務預設埠為 control-plane `:8080` / gateway `:8081` / realtime `:8082`。
+1. **MsgMesh 帳號與服務網址。** 在[面板](https://msgmesh-panel.alderflux.com)註冊帳號。各樣板 `.env` 裡的 control-plane / gateway / realtime 三個 URL 都填 `https://msgmesh-api.alderflux.com`——`.env.example` 的預設值是 `localhost`,不會連到 MsgMesh,一定要改。
 
 2. **一把 API key。** 在面板註冊帳號後簽發(明文只顯示一次)。依樣板需要的能力挑 scope:
    - `agent-notifier` 只收訊 → 需 **consumer**(或含 `subscribe` 能力的 key)。
    - `chat-web` 又收又發 → 需一把能同時 **publish + subscribe** 的 key。
 
-3. **Node ≥ 18(建議 ≥ 20.6)。** 各樣板的收發都用 SDK 內建 `fetch`(Node 18+)。`chat-web` 的 token-broker(`server.js`)與 `agent-notifier` 都用 `--env-file` 讀 `.env`,需 Node ≥ 20.6(替代跑法見各自 README)。
+3. **先建好範例要用的 topic。** 平台不會自動建立 topic,發到不存在的 topic 會回 404。面板總覽的「一鍵建立預設 topic + starter key」只建 `events`;範例預設的 topic 是 `chat.lobby`(`chat-web`)與 `orders`(`agent-notifier`)。請在面板建立同名 topic,或把 `.env` 的 topic 改成已存在的(例如 `events`;`chat-web` 的前後端兩處要一致)。
+
+4. **Node ≥ 18(建議 ≥ 20.6)。** 各樣板的收發都用 SDK 內建 `fetch`(Node 18+)。`chat-web` 的 token-broker(`server.js`)與 `agent-notifier` 都用 `--env-file` 讀 `.env`,需 Node ≥ 20.6(替代跑法見各自 README)。
 
 每個樣板各自附 `README.md`(如何 `npm install && npm run …`)與 `.env.example`。
 

@@ -43,7 +43,7 @@ export $(grep -v '^#' .env | xargs) && node index.js
 | --- | --- |
 | `MSGMESH_GATEWAY_URL` | 收發服務位址 |
 | `MSGMESH_API_KEY` | API key(需 consumer / subscribe 能力,且**不限房間**——poll 吃整個 topic,room-scoped token 會被 403) |
-| `MSGMESH_TOPIC` | 要監看的 topic,預設 `orders` |
+| `MSGMESH_TOPIC` | 要監看的 topic,預設 `orders`(須先在面板建立,見根 README「共同前置」) |
 | `MSGMESH_GROUP` | 消費者 group,預設 `agent-notifier`(同 group 多實例分攤訊息) |
 
 ## 改成你的用途

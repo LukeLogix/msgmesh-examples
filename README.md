@@ -4,7 +4,7 @@
 
 Official examples / starter templates for **MsgMesh** — each folder is a minimal "`clone` and run" starting point that shows how to use the official [`@msgmesh/sdk`](https://www.npmjs.com/package/@msgmesh/sdk) SDK to connect to MsgMesh, the multi-tenant event bus, and send and receive realtime events.
 
-Fill in your gateway / realtime URL and an API key, and within minutes you'll have an app that can send and receive messages.
+Fill in an API key and the service URLs, create the topic the example uses, and within minutes you'll have an app that can send and receive messages.
 
 ## Templates
 
@@ -22,13 +22,15 @@ A `room` = a sub-channel under a single topic (physically = the Kafka record key
 
 ## Common prerequisites
 
-1. **A running MsgMesh instance.** Point the gateway / realtime / control-plane URLs in each template's `.env` at your instance — one you **self-host**, or the address of your **hosted account** (obtained by registering in the panel; see below). When self-hosting locally, the default ports are control-plane `:8080` / gateway `:8081` / realtime `:8082`.
+1. **A MsgMesh account and the service URLs.** Register in the [panel](https://msgmesh-panel.alderflux.com). Set all three URLs in each template's `.env` (control-plane / gateway / realtime) to `https://msgmesh-api.alderflux.com` — the defaults in `.env.example` point at `localhost`, which won't reach MsgMesh, so you must change them.
 
 2. **An API key.** Issued after registering an account in the panel (the plaintext is shown only once). Pick the scope by the capabilities each template needs:
    - `agent-notifier` only receives → needs a **consumer** key (or a key that includes the `subscribe` capability).
    - `chat-web` both receives and sends → needs a key that can both **publish + subscribe**.
 
-3. **Node ≥ 18 (≥ 20.6 recommended).** Every template's send/receive uses the SDK's built-in `fetch` (Node 18+). The `chat-web` token-broker (`server.js`) and `agent-notifier` both read `.env` via `--env-file`, which needs Node ≥ 20.6 (alternative approaches are in each README).
+3. **Create the topic the example uses first.** The platform does not create topics implicitly; publishing to a topic that doesn't exist returns 404. The panel's one-click starter button (labelled「一鍵建立預設 topic + starter key」— the panel is Chinese-only for now) only creates `events`, while the examples default to `chat.lobby` (`chat-web`) and `orders` (`agent-notifier`). Create a topic with the same name in the panel, or point the topic in `.env` at one that exists (for example `events`; in `chat-web` the frontend and backend values must match).
+
+4. **Node ≥ 18 (≥ 20.6 recommended).** Every template's send/receive uses the SDK's built-in `fetch` (Node 18+). The `chat-web` token-broker (`server.js`) and `agent-notifier` both read `.env` via `--env-file`, which needs Node ≥ 20.6 (alternative approaches are in each README).
 
 Each template ships its own `README.md` (how to `npm install && npm run …`) and `.env.example`.
 
