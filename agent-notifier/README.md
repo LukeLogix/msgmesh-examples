@@ -43,7 +43,7 @@ export $(grep -v '^#' .env | xargs) && node index.js
 | --- | --- |
 | `MSGMESH_GATEWAY_URL` | Address of the send/receive service |
 | `MSGMESH_API_KEY` | API key (needs the consumer / subscribe capability, and **no room restriction** — poll consumes the whole topic, so a room-scoped token is rejected with 403) |
-| `MSGMESH_TOPIC` | The topic to watch; defaults to `orders` |
+| `MSGMESH_TOPIC` | The topic to watch; defaults to `orders` (create it in the panel first — see "Common prerequisites" in the root README) |
 | `MSGMESH_GROUP` | Consumer group; defaults to `agent-notifier` (multiple instances in the same group share the messages) |
 
 ## Adapt it to your use case
