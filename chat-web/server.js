@@ -29,6 +29,12 @@ const API_KEY = process.env.MSGMESH_API_KEY;
 const CONTROL_PLANE = (process.env.MSGMESH_CONTROL_PLANE_URL || "http://localhost:8080").replace(/\/$/, "");
 const TOPIC = process.env.MSGMESH_TOPIC || "chat.lobby";
 const PORT = Number(process.env.PORT) || 8787;
+// Interface to listen on. Defaults to 127.0.0.1 (this machine only): /api/token has no login of its
+// own, so anyone who can reach it can trade your key for tokens. Widen it (e.g. 0.0.0.0 in a
+// container) only when the broker sits behind your own authentication.
+// Not named HOST: some shells set HOST to the machine name, and under --env-file a variable that is
+// already in the environment wins over the one in .env.
+const BIND_HOST = process.env.BIND_HOST || "127.0.0.1";
 
 // ROOMS — the allow-set of rooms available to the user this broker represents (comma-separated;
 // a real app would derive it from the signed-in identity). Token minting scopes the capabilities'
@@ -178,8 +184,9 @@ const server = createServer((req, res) => {
   return void serveStatic(req, res);
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, BIND_HOST, () => {
   console.log(`chat-web token-broker up → http://localhost:${PORT}`);
+  console.log(`  listening on:  ${BIND_HOST}${BIND_HOST === "127.0.0.1" ? " (this machine only; set BIND_HOST to change)" : ""}`);
   console.log(`  control plane: ${CONTROL_PLANE}`);
   console.log(`  topic:         ${TOPIC}`);
   console.log(`  rooms:         ${ROOMS.length ? ROOMS.join(", ") : "(unrestricted; MSGMESH_ROOMS not set)"}`);
