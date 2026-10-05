@@ -22,12 +22,21 @@ So the platform gates this kind of "whole-topic read" directly: **a poll/consume
 ## Run it
 
 ```bash
-cp .env.example .env      # fill in the gateway URL and a consumer API key
+cp .env.example .env      # fill in MSGMESH_API_KEY
 npm install
 npm start                 # = node --env-file=.env index.js
 ```
 
-Once started, it prints a "subscribing to topic …" line, then prints each event as it arrives. Publish one to that topic (via `chat-web`, the SDK, or `curl`) and you'll see it pop up. `Ctrl-C` shuts down gracefully.
+`.env.example` already sets `MSGMESH_GATEWAY_URL` to `https://msgmesh-api.alderflux.com`; keep it. For a try on your own machine, the starter key from the panel's one-click setup works as `MSGMESH_API_KEY` (see "Common prerequisites" in the root README).
+
+Once started, it prints a "subscribing to topic …" line, then prints each event as it arrives. To see one, publish an event to `orders` from a second terminal in this folder:
+
+```bash
+export $(grep -v '^#' .env | xargs)   # load MSGMESH_API_KEY from .env into this shell
+curl -X POST https://msgmesh-api.alderflux.com/v1/topics/orders/messages -H "Authorization: Bearer $MSGMESH_API_KEY" -H "Content-Type: application/json" -d '{"item":"test-order"}'
+```
+
+The response is `{"partition":…,"offset":…}`, and the event pops up in the first terminal. `Ctrl-C` shuts down gracefully.
 
 ### Running on Node 18
 
@@ -41,9 +50,9 @@ export $(grep -v '^#' .env | xargs) && node index.js
 
 | Variable | Purpose |
 | --- | --- |
-| `MSGMESH_GATEWAY_URL` | Address of the send/receive service |
+| `MSGMESH_GATEWAY_URL` | Address of the send/receive service: `https://msgmesh-api.alderflux.com` (already set in `.env.example`) |
 | `MSGMESH_API_KEY` | API key (needs the consumer / subscribe capability, and **no room restriction** — poll consumes the whole topic, so a room-scoped token is rejected with 403) |
-| `MSGMESH_TOPIC` | The topic to watch; defaults to `orders` (create it in the panel first — see "Common prerequisites" in the root README) |
+| `MSGMESH_TOPIC` | The topic to watch; defaults to `orders`, which the panel's one-click setup creates by default. Only on an account that already existed, or if you unticked that option, create it yourself first (see "Common prerequisites" in the root README) |
 | `MSGMESH_GROUP` | Consumer group; defaults to `agent-notifier` (multiple instances in the same group share the messages) |
 
 ## Adapt it to your use case

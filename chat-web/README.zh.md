@@ -51,7 +51,7 @@ SDK 拿到 token 後會自動快取、於將過期前重取、SSE 重連時換�
 - **不想分房間**:留空 `MSGMESH_ROOMS` 與 `VITE_MSGMESH_ROOMS`,`rooms` 省略 = 不限房間 = 單一大廳,行為同舊版。
 - **只有 realtime 能 per-room**:SSE / WS 訂閱可帶 `?room=` 精準收單一房間;但 poll / consume(長輪詢整個 topic)是 **firehose**,room-scoped 憑證用不了(平台回 403)——細顆粒房間請走 realtime。詳見 [`agent-notifier/README.zh.md`](../agent-notifier/README.zh.md)。
 
-> 版本註記:收發兩端現在同一個詞。發佈端 `publish(…, { room })` 需 `@msgmesh/sdk` **0.2.0 以上** —— 0.2.0 之前這個選項叫 `key`,而 0.2.0 若仍傳 `key` 會直接丟錯(不會靜默把房間路由丟掉)。**訂閱端 `stream`/`streamWs` 的 `{ room }` 過濾**自 0.1.4 起支援。`package.json` 則要求再高一個小版的 `^0.3.0`,因為補歷史的接縫改用訊息 id 去重(見下下節)。
+> 版本註記:收發兩端現在同一個詞。發佈端 `publish(…, { room })` 需 `@msgmesh/sdk` **0.2.0 以上** —— 0.2.0 之前這個選項叫 `key`,而 0.2.0 若仍傳 `key` 會直接丟錯(不會靜默把房間路由丟掉)。**訂閱端 `stream`/`streamWs` 的 `{ room }` 過濾**自 0.1.4 起支援。補歷史的接縫(見下下節)按訊息 id 去重,需 **0.3.0 以上**;`package.json` 要求的是 `^0.5.0`。
 
 ## 用 WebSocket 收(streamWs)
 
@@ -98,10 +98,12 @@ mq.stream(topic, (value, meta) => {
 
 ```bash
 npm install
-cp .env.example .env       # 填入 MSGMESH_API_KEY 等值(見下方「設定」)
+cp .env.example .env       # 填入 MSGMESH_API_KEY(見下方「設定」)
 npm run build              # Vite 打包前端到 dist/
 node --env-file=.env server.js   # 起 token-broker + 服務 dist/,預設 http://localhost:8787
 ```
+
+`.env.example` 已把三個位址(`MSGMESH_CONTROL_PLANE_URL`、`VITE_MSGMESH_GATEWAY_URL`、`VITE_MSGMESH_REALTIME_URL`)都設成 `https://msgmesh-api.alderflux.com`,維持原值即可。在自己電腦上試跑,`MSGMESH_API_KEY` 可以直接填一鍵開箱給的 starter key;上線前要換成權限更窄的 key(見「上線安全」)。
 
 打開 http://localhost:8787,輸入暱稱、發一則訊息;另開一個分頁會即時收到。
 
@@ -109,6 +111,7 @@ node --env-file=.env server.js   # 起 token-broker + 服務 dist/,預設 http:/
 - **試 WebSocket**:網址加 `?transport=ws`(如 `http://localhost:8787/?room=support&transport=ws`)改用 `streamWs` 收訊,徽章會顯示 `WS`。
 - `--env-file` 需 **Node ≥ 20.6**。若用 `npm start`(= `node server.js`),它不會自己讀 `.env`,請先自行載入環境變數(如 `export $(grep -v '^#' .env | xargs)`)。
 - 改了前端(`src/` / `index.html`)要重跑 `npm run build`;改了 `.env` 或 `server.js` 要重啟 server。
+- token-broker 只監聽 `127.0.0.1`,同一個區網的其他機器連不到 `/api/token`,也就拿不到用你的 key 簽出的 token。要改之前先看「設定」裡的 `BIND_HOST`。
 
 ### 開發時要熱更新
 
@@ -124,7 +127,7 @@ npm run dev                       # 終端 B:Vite dev server(:5173)
 ### 需要什麼
 
 - 一個跑著的 MsgMesh(見 repo 根 README 的「共同前置」)。
-- 一把能對該 topic **同時 publish 與 subscribe** 的 API key,放進後端 `.env` 的 `MSGMESH_API_KEY`。
+- 一把能對該 topic **同時 publish 與 subscribe** 的 API key,放進後端 `.env` 的 `MSGMESH_API_KEY`(在自己電腦上試跑,用一鍵開箱給的 starter key 即可)。
 
 ## 設定
 
@@ -135,17 +138,18 @@ npm run dev                       # 終端 B:Vite dev server(:5173)
 | 變數 | 用途 |
 | --- | --- |
 | `MSGMESH_API_KEY` | 長期 API key(publish + subscribe 能力,且能收發下方房間),用來鑄短期 token。只存後端。 |
-| `MSGMESH_CONTROL_PLANE_URL` | 治理面位址(鑄 token 的 `POST /v1/tokens` 打這裡),本機預設 `http://localhost:8080` |
+| `MSGMESH_CONTROL_PLANE_URL` | 治理面位址(鑄 token 的 `POST /v1/tokens` 打這裡):`https://msgmesh-api.alderflux.com`(`.env.example` 已填好) |
 | `MSGMESH_TOPIC` | 聊天室 topic,需與前端 `VITE_MSGMESH_TOPIC` 一致 |
 | `MSGMESH_ROOMS` | 這個使用者「可用房間」允許集(逗號分隔),鑄 token 時降權到這一集(**真正的授權邊界**)。留空=不限房間 |
 | `PORT` | token-broker 監聽埠,預設 `8787` |
+| `BIND_HOST` | token-broker 監聽的介面,預設 `127.0.0.1`(只有本機連得到)。`/api/token` 本身沒有登入檢查,連得到的人都能拿到用你的 key 簽出的 token,所以只有在它前面已經有你自己的驗證時,才放寬(例如 `0.0.0.0`) |
 
 ### 前端(`VITE_` 前綴會被打包進 bundle,皆為非敏感值)
 
 | 變數 | 用途 |
 | --- | --- |
-| `VITE_MSGMESH_GATEWAY_URL` | 收發服務(publish 打這裡) |
-| `VITE_MSGMESH_REALTIME_URL` | 即時服務(SSE 串流與 WebSocket 都打這裡) |
+| `VITE_MSGMESH_GATEWAY_URL` | 收發服務(publish 打這裡):`https://msgmesh-api.alderflux.com` |
+| `VITE_MSGMESH_REALTIME_URL` | 即時服務(SSE 串流與 WebSocket 都打這裡):`https://msgmesh-api.alderflux.com` |
 | `VITE_MSGMESH_TOPIC` | 聊天室 topic,預設 `chat.lobby` |
 | `VITE_MSGMESH_ROOMS` | 房間選單清單(逗號分隔),**僅前端 UI 用**,需與後端 `MSGMESH_ROOMS` 一致。留空=單一大廳 |
 
@@ -154,7 +158,8 @@ npm run dev                       # 終端 B:Vite dev server(:5173)
 這個樣板**已預設 token-broker**:前端零長期 key,後端鑄短期降權 token —— 這正是上線該有的樣子。實際部署時再留意:
 
 - `.env`(含 `MSGMESH_API_KEY`)只放後端,已被 `.gitignore` 排除,別 commit。
-- 讓 `MSGMESH_API_KEY` 的能力就限於這個聊天室 topic 的 publish + subscribe(最小權限);別用 admin 或萬用 key。
+- 上線前,改簽一把只對這個聊天室 topic 有 publish + subscribe 能力的 key 放進 `MSGMESH_API_KEY`(最小權限)。本機試跑用的 admin starter key 別放上部署的伺服器,萬用 key 也不要。
+- `server.js` 預設只監聽 `127.0.0.1`。部署時若放寬 `BIND_HOST`,先在 `/api/token` 前面加上你自己的登入,否則連得到的人都能領 token。
 - `server.js` 只轉發 `{ token, expires_in }`,不把 key 或上游錯誤細節洩進前端回應。
 - 「每人一組房間」就是把 `MSGMESH_ROOMS` 改成**依登入身分動態產生**(如某租戶的房間集),在 `server.js` 的降權 body 填進 `capabilities[].rooms`——token 只能碰這些房間,平台強制,其餘一律 403。這比「每房一個 topic」更省(共用一個 topic + 一條 live-tail),隔離仍由憑證保證。
 - **平台不驗「誰在說話」。** 房間隔離只保證「能收發哪些房間」,不驗證訊息裡的 `user`(發訊者)——這個 demo 的暱稱就是前端自報的,同一房內任何人都能把 `user` 填成別人**冒名發言**。正式聊天要防冒名:**在 `server.js` 鑄 token 時綁定該登入使用者,並由後端戳上 / 驗證 `user`**,別讓前端自報身分。

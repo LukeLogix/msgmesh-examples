@@ -52,7 +52,7 @@ Data flow (frontend room → token scope-down → subscribe/publish):
 - **Don't want rooms at all**: leave `MSGMESH_ROOMS` and `VITE_MSGMESH_ROOMS` empty; omitting `rooms` = no room restriction = a single lobby, behaving like the older version.
 - **Only realtime supports per-room**: an SSE / WS subscription can carry `?room=` to precisely receive a single room; but poll / consume (long-polling the whole topic) is a **firehose** where room-scoped credentials don't work (the platform returns 403) — for fine-grained rooms, use realtime. See [`agent-notifier/README.md`](../agent-notifier/README.md) for details.
 
-> Version note: both sides now use the same word. `publish(…, { room })` requires `@msgmesh/sdk` **0.2.0 or newer** — before 0.2.0 that option was called `key`, and 0.2.0 throws if you still pass `key` rather than silently dropping the routing. The **subscribe-side `{ room }` filtering of `stream`/`streamWs`** has been supported since 0.1.4. `package.json` requires `^0.3.0`, one minor higher, because the backlog seam dedupes by message id (next section but one).
+> Version note: both sides now use the same word. `publish(…, { room })` requires `@msgmesh/sdk` **0.2.0 or newer** — before 0.2.0 that option was called `key`, and 0.2.0 throws if you still pass `key` rather than silently dropping the routing. The **subscribe-side `{ room }` filtering of `stream`/`streamWs`** has been supported since 0.1.4. The backlog seam (next section but one) needs **0.3.0 or newer**, because it dedupes by message id; `package.json` asks for `^0.5.0`.
 
 ## Receiving over WebSocket (streamWs)
 
@@ -99,10 +99,12 @@ Two details worth copying:
 
 ```bash
 npm install
-cp .env.example .env       # fill in MSGMESH_API_KEY and other values (see "Configuration" below)
+cp .env.example .env       # fill in MSGMESH_API_KEY (see "Configuration" below)
 npm run build              # Vite bundles the frontend into dist/
 node --env-file=.env server.js   # start the token-broker + serve dist/, default http://localhost:8787
 ```
+
+`.env.example` already sets all three addresses (`MSGMESH_CONTROL_PLANE_URL`, `VITE_MSGMESH_GATEWAY_URL`, `VITE_MSGMESH_REALTIME_URL`) to `https://msgmesh-api.alderflux.com`; keep them. For a try on your own machine, `MSGMESH_API_KEY` can be the starter key from the panel's one-click setup; switch to a narrower key before going to production (see "Production security").
 
 Open http://localhost:8787, enter a nickname, and send a message; open another tab and it receives it in realtime.
 
@@ -110,6 +112,7 @@ Open http://localhost:8787, enter a nickname, and send a message; open another t
 - **Try WebSocket**: add `?transport=ws` to the URL (e.g. `http://localhost:8787/?room=support&transport=ws`) to receive via `streamWs`; the badge will show `WS`.
 - `--env-file` needs **Node ≥ 20.6**. If you use `npm start` (= `node server.js`), it won't read `.env` on its own, so load the environment variables yourself first (e.g. `export $(grep -v '^#' .env | xargs)`).
 - After changing the frontend (`src/` / `index.html`), re-run `npm run build`; after changing `.env` or `server.js`, restart the server.
+- The token-broker listens on `127.0.0.1` only, so other machines on your network cannot reach `/api/token` and get tokens minted with your key. Read `BIND_HOST` under "Configuration" before changing that.
 
 ### Hot reload during development
 
@@ -125,7 +128,7 @@ npm run dev                       # terminal B: Vite dev server (:5173)
 ### What you need
 
 - A running MsgMesh (see "Common prerequisites" in the repo root README).
-- An API key that can both **publish and subscribe** to that topic, placed in the backend `.env` as `MSGMESH_API_KEY`.
+- An API key that can both **publish and subscribe** to that topic, placed in the backend `.env` as `MSGMESH_API_KEY` (for a try on your own machine, the starter key from the panel's one-click setup works).
 
 ## Configuration
 
@@ -136,17 +139,18 @@ Everything goes through `.env` (see `.env.example`), in two sections. **The topi
 | Variable | Purpose |
 | --- | --- |
 | `MSGMESH_API_KEY` | Long-lived API key (publish + subscribe capability, able to send/receive in the rooms below), used to mint short-lived tokens. Backend only. |
-| `MSGMESH_CONTROL_PLANE_URL` | Control-plane address (the `POST /v1/tokens` that mints tokens hits this); defaults to `http://localhost:8080` locally |
+| `MSGMESH_CONTROL_PLANE_URL` | Control-plane address (the `POST /v1/tokens` that mints tokens hits this): `https://msgmesh-api.alderflux.com` (already set in `.env.example`) |
 | `MSGMESH_TOPIC` | Chat topic; must match the frontend's `VITE_MSGMESH_TOPIC` |
 | `MSGMESH_ROOMS` | This user's "accessible rooms" allow-set (comma-separated); the token is scoped down to this set when minted (**the real authorization boundary**). Empty = no room restriction |
 | `PORT` | Port the token-broker listens on; defaults to `8787` |
+| `BIND_HOST` | Interface the token-broker listens on; defaults to `127.0.0.1` (this machine only). `/api/token` has no login of its own — anyone who can reach it gets tokens minted with your key — so widen it (e.g. `0.0.0.0`) only when the broker sits behind your own authentication |
 
 ### Frontend (the `VITE_` prefix gets bundled; all are non-sensitive values)
 
 | Variable | Purpose |
 | --- | --- |
-| `VITE_MSGMESH_GATEWAY_URL` | Send/receive service (publish hits this) |
-| `VITE_MSGMESH_REALTIME_URL` | Realtime service (both SSE streaming and WebSocket hit this) |
+| `VITE_MSGMESH_GATEWAY_URL` | Send/receive service (publish hits this): `https://msgmesh-api.alderflux.com` |
+| `VITE_MSGMESH_REALTIME_URL` | Realtime service (both SSE streaming and WebSocket hit this): `https://msgmesh-api.alderflux.com` |
 | `VITE_MSGMESH_TOPIC` | Chat topic; defaults to `chat.lobby` |
 | `VITE_MSGMESH_ROOMS` | Room menu list (comma-separated), **frontend UI only**; must match the backend's `MSGMESH_ROOMS`. Empty = a single lobby |
 
@@ -155,7 +159,8 @@ Everything goes through `.env` (see `.env.example`), in two sections. **The topi
 This template **already uses a token-broker by default**: no long-lived key in the frontend, and the backend mints short-lived, scoped-down tokens — this is exactly how production should look. When you actually deploy, also mind these:
 
 - `.env` (containing `MSGMESH_API_KEY`) goes only on the backend, is already excluded by `.gitignore`, and must not be committed.
-- Keep `MSGMESH_API_KEY`'s capabilities limited to publish + subscribe on this chat topic (least privilege); don't use an admin or wildcard key.
+- Before going to production, issue a key whose only capabilities are publish + subscribe on this chat topic (least privilege) and use it as `MSGMESH_API_KEY`. The admin starter key that is fine for a try on your own machine should not go onto a deployed server; neither should a wildcard key.
+- `server.js` listens on `127.0.0.1` by default. If you widen `BIND_HOST` to deploy it, put your own login in front of `/api/token` first — otherwise anyone who can reach it gets tokens.
 - `server.js` forwards only `{ token, expires_in }`, leaking neither the key nor upstream error details into the frontend response.
 - "A set of rooms per user" means changing `MSGMESH_ROOMS` to be **generated dynamically from the logged-in identity** (e.g. a given tenant's room set) and filling it into `capabilities[].rooms` in the scoped-down body in `server.js` — the token can only touch those rooms, enforced by the platform, everything else a 403. This is cheaper than "one topic per room" (a shared topic + a single live-tail), with isolation still guaranteed by the credential.
 - **The platform does not verify "who is speaking".** Room isolation only guarantees "which rooms you can send to / receive from"; it does not verify the `user` (sender) in the message — the nickname in this demo is self-reported by the frontend, and anyone in the same room can set `user` to someone else and **impersonate** them. Production chat must prevent impersonation: **bind the token to the logged-in user when minting it in `server.js`, and have the backend stamp / verify `user`**, rather than letting the frontend self-report its identity.

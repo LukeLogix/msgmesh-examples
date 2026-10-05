@@ -4,7 +4,7 @@
 
 **MsgMesh** 的官方範例／樣板集合 —— 每個資料夾都是一個「`clone` 就能跑」的最小起手式,示範如何用官方 SDK [`@msgmesh/sdk`](https://www.npmjs.com/package/@msgmesh/sdk) 接入 MsgMesh 這個多租戶事件總線,收發即時事件。
 
-填上一把 API key 與服務網址、建好範例要用的 topic,幾分鐘內就有一個能收發訊息的應用。
+在面板註冊、按一鍵開箱(預設會一併建好範例要用的 topic)、把 API key 填進 `.env`,幾分鐘內就有一個能收發訊息的應用。
 
 ## 樣板
 
@@ -22,13 +22,13 @@
 
 ## 共同前置
 
-1. **MsgMesh 帳號與服務網址。** 在[面板](https://msgmesh-panel.alderflux.com)註冊帳號。各樣板 `.env` 裡的 control-plane / gateway / realtime 三個 URL 都填 `https://msgmesh-api.alderflux.com`——`.env.example` 的預設值是 `localhost`,不會連到 MsgMesh,一定要改。
+1. **MsgMesh 帳號與服務網址。** 在[面板](https://msgmesh-panel.alderflux.com)註冊帳號。各樣板 `.env` 裡的 control-plane / gateway / realtime 網址都是同一個位址 `https://msgmesh-api.alderflux.com`;`.env.example` 已經填好,複製後維持原值即可。
 
-2. **一把 API key。** 在面板註冊帳號後簽發(明文只顯示一次)。依樣板需要的能力挑 scope:
-   - `agent-notifier` 只收訊 → 需 **consumer**(或含 `subscribe` 能力的 key)。
-   - `chat-web` 又收又發 → 需一把能同時 **publish + subscribe** 的 key。
+2. **一把 API key。** 在自己電腦上試跑,可以直接用一鍵開箱(見下一項)給的 **starter key**:它是 admin 權限,兩個樣板都能用。明文只顯示一次,請當下保存。範例要上線前,改到面板的 Keys 頁另簽一把只給該樣板所需能力的 key:
+   - `agent-notifier` 只收訊 → **consumer**(或含 `subscribe` 能力的 key)。
+   - `chat-web` 又收又發 → 只對它的聊天室 topic(預設 `chat.lobby`)有 **publish + subscribe** 能力的 key,見其 README「上線安全」。
 
-3. **先建好範例要用的 topic。** 平台不會自動建立 topic,發到不存在的 topic 會回 404。面板總覽的「一鍵建立預設 topic + starter key」只建 `events`;範例預設的 topic 是 `chat.lobby`(`chat-web`)與 `orders`(`agent-notifier`)。請在面板建立同名 topic,或把 `.env` 的 topic 改成已存在的(例如 `events`;`chat-web` 的前後端兩處要一致)。
+3. **範例要用的 topic:`chat.lobby`(`chat-web`)與 `orders`(`agent-notifier`)。** 平台不會自動建立 topic,發到不存在的 topic 會回 404。新帳號在面板總覽按「一鍵建立預設 topic + starter key」,並維持預設勾選「一併建立官方範例用的 topic」,除了預設 topic `events`,也會建好 `chat.lobby` 與 `orders`。它們和其他 topic 一樣佔方案的 topic 額度,不用時可在總覽的 Topics 區塊刪除。既有帳號、或當時沒勾這個選項的人,才需要自己在 Topics 區塊建立同名 topic,或把 `.env` 的 topic 改成已存在的(例如 `events`;`chat-web` 的前後端兩處要一致)。
 
 4. **Node ≥ 18(建議 ≥ 20.6)。** 各樣板的收發都用 SDK 內建 `fetch`(Node 18+)。`chat-web` 的 token-broker(`server.js`)與 `agent-notifier` 都用 `--env-file` 讀 `.env`,需 Node ≥ 20.6(替代跑法見各自 README)。
 
