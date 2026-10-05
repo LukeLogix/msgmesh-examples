@@ -20,11 +20,18 @@
 - **Realtime(SSE `stream` / WebSocket `streamWs`)** 可 **per-room**:訂閱傳 `{ room }` 只收該房間;搭配後端 token-broker 把 token 的 `rooms` 降權到「該使用者可用房間」,平台強制隔離(逾越 403)。見 `chat-web`。
 - **Poll / consume(`subscribe` 長輪詢)** 是 **firehose**:吃整個 topic(不分房間)的事件流,不做房間過濾;room-scoped 憑證呼叫會被 **403**。整租戶消費請用**不限房間**的 key,自行讀 `msg.room` 分流。見 `agent-notifier`。
 
+## 不用 JavaScript?
+
+目前官方範例只有 JavaScript:上面兩個樣板就是全部。用別的工具接入,可以從這裡開始:
+
+- **MCP(Claude Code、Cursor、Claude Desktop)。** MCP server 有自己的公開 repo [`msgmesh-mcp`](https://github.com/LukeLogix/msgmesh-mcp),其中的 [`examples/mcp-config.example.json`](https://github.com/LukeLogix/msgmesh-mcp/blob/main/examples/mcp-config.example.json) 是可以直接複製進 MCP client 的設定。必填的環境變數只有 `MQ_API_KEY`;三個服務網址預設就是 `https://msgmesh-api.alderflux.com`。這份設定用 `npx` 啟動 server,所以電腦上仍要有 Node,但不必寫 JavaScript。管理 topic、key 這類的 tool 需要 admin 權限的 key(starter key 就是);收發只需要該 topic 對應的能力。
+- **Python。** `pip install msgmesh`([PyPI](https://pypi.org/project/msgmesh/))。建立 client 時,三個服務網址(`control_plane_url`、`gateway_url`、`realtime_url`)都傳 `https://msgmesh-api.alderflux.com`;不傳的話預設是 localhost。API 是同步的,命名用 snake_case。topic 用範例同一組(`chat.lobby` 與 `orders`)。這個 repo 沒有 Python 範例。
+
 ## 共同前置
 
-1. **MsgMesh 帳號與服務網址。** 在[面板](https://msgmesh-panel.alderflux.com)註冊帳號。各樣板 `.env` 裡的 control-plane / gateway / realtime 網址都是同一個位址 `https://msgmesh-api.alderflux.com`;`.env.example` 已經填好,複製後維持原值即可。
+1. **MsgMesh 帳號與服務網址。** 在[面板](https://msgmesh-panel.alderflux.com/login?mode=register)註冊帳號。各樣板 `.env` 裡的 control-plane / gateway / realtime 網址都是同一個位址 `https://msgmesh-api.alderflux.com`;`.env.example` 已經填好,複製後維持原值即可。
 
-2. **一把 API key。** 在自己電腦上試跑,可以直接用一鍵開箱(見下一項)給的 **starter key**:它是 admin 權限,兩個樣板都能用。明文只顯示一次,請當下保存。範例要上線前,改到面板的 Keys 頁另簽一把只給該樣板所需能力的 key:
+2. **一把 API key。** 在自己電腦上試跑,可以直接用一鍵開箱(見下一項)給的 **starter key**:它是 admin 權限,兩個樣板都能用。明文只顯示一次,請當下保存。沒存到也不必重來:topic 都還在,到面板的 Keys 頁選「key(自訂:可又推又收)」,維持預設(publish + subscribe 都勾、topics 留空 = 所有 topic)直接按「簽發」,這把 key 就具備兩個樣板需要的能力。範例要上線前,改到面板的 Keys 頁另簽一把只給該樣板所需能力的 key:
    - `agent-notifier` 只收訊 → **consumer**(或含 `subscribe` 能力的 key)。
    - `chat-web` 又收又發 → 只對它的聊天室 topic(預設 `chat.lobby`)有 **publish + subscribe** 能力的 key,見其 README「上線安全」。
 

@@ -32,7 +32,7 @@ npm install
 npm start
 ```
 
-啟動後會印一行「訂閱 topic …」,接著每收到一則事件就印出來。要看到效果,在這個資料夾另開一個終端:下面第一行把 `.env` 的 `MSGMESH_API_KEY` 載進這個 shell,第二行往 `orders` 發一筆。
+啟動後會印一行 `agent-notifier: subscribing to topic "orders" (group=agent-notifier)... press Ctrl-C to quit`,接著每收到一則事件就印出來。要看到效果,在這個資料夾另開一個終端:下面第一行把 `.env` 的 `MSGMESH_API_KEY` 載進這個 shell,第二行往 `orders` 發一筆。
 
 ```bash
 export $(grep -v '^#' .env | xargs)
@@ -40,6 +40,8 @@ curl -X POST https://msgmesh-api.alderflux.com/v1/topics/orders/messages -H "Aut
 ```
 
 回應是 `{"partition":…,"offset":…}`,第一個終端就會跳出這筆事件。`Ctrl-C` 優雅結束。
+
+新的 group 從 topic 保留期內最舊的訊息開始收(保留期多長由方案決定)。所以把 `MSGMESH_TOPIC` 指到已經有訊息的 topic(例如用過 `chat-web` 之後的 `chat.lobby`)、或換一個 `MSGMESH_GROUP`,啟動後會先收到既有的訊息,每次投遞照常計 operations。同一個 group 重啟則從上次的位置接續。
 
 ### Node 18 跑法
 
@@ -56,7 +58,7 @@ export $(grep -v '^#' .env | xargs) && node index.js
 | `MSGMESH_GATEWAY_URL` | 收發服務位址:`https://msgmesh-api.alderflux.com`(`.env.example` 已填好) |
 | `MSGMESH_API_KEY` | API key(需 consumer / subscribe 能力,且**不限房間**——poll 吃整個 topic,room-scoped token 會被 403) |
 | `MSGMESH_TOPIC` | 要監看的 topic,預設 `orders`,面板一鍵開箱預設已建立。既有帳號或當時沒勾選的人,才需要自己先建(見根 README「共同前置」) |
-| `MSGMESH_GROUP` | 消費者 group,預設 `agent-notifier`(同 group 多實例分攤訊息) |
+| `MSGMESH_GROUP` | 消費者 group,預設 `agent-notifier`(同 group 多實例分攤訊息)。新的 group 從保留期內最舊的訊息開始收 |
 
 ## 改成你的用途
 

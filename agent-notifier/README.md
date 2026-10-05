@@ -41,6 +41,8 @@ curl -X POST https://msgmesh-api.alderflux.com/v1/topics/orders/messages -H "Aut
 
 The response is `{"partition":…,"offset":…}`, and the event pops up in the first terminal. `Ctrl-C` shuts down gracefully.
 
+A new group starts from the oldest message still within the topic's retention (how long that is depends on your plan). So if you point `MSGMESH_TOPIC` at a topic that already has messages (for example `chat.lobby` after you have used `chat-web`), or switch to a different `MSGMESH_GROUP`, the script first receives the messages that are already there, and each delivery counts toward operations as usual. Restarting with the same group continues from where that group left off.
+
 ### Running on Node 18
 
 The `--env-file` used by `npm start` needs Node ≥ 20.6. On Node 18, load the environment variables yourself instead:
@@ -56,7 +58,7 @@ export $(grep -v '^#' .env | xargs) && node index.js
 | `MSGMESH_GATEWAY_URL` | Address of the send/receive service: `https://msgmesh-api.alderflux.com` (already set in `.env.example`) |
 | `MSGMESH_API_KEY` | API key (needs the consumer / subscribe capability, and **no room restriction** — poll consumes the whole topic, so a room-scoped token is rejected with 403) |
 | `MSGMESH_TOPIC` | The topic to watch; defaults to `orders`, which the panel's one-click setup creates by default. Only on an account that already existed, or if you unticked that option, create it yourself first (see "Common prerequisites" in the root README) |
-| `MSGMESH_GROUP` | Consumer group; defaults to `agent-notifier` (multiple instances in the same group share the messages) |
+| `MSGMESH_GROUP` | Consumer group; defaults to `agent-notifier` (multiple instances in the same group share the messages). A new group starts from the oldest message within the topic's retention |
 
 ## Adapt it to your use case
 
