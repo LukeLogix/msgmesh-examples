@@ -99,12 +99,17 @@ Two details worth copying:
 
 ```bash
 npm install
-cp .env.example .env       # fill in MSGMESH_API_KEY (see "Configuration" below)
-npm run build              # Vite bundles the frontend into dist/
-node --env-file=.env server.js   # start the token-broker + serve dist/, default http://localhost:8787
+cp .env.example .env
 ```
 
-`.env.example` already sets all three addresses (`MSGMESH_CONTROL_PLANE_URL`, `VITE_MSGMESH_GATEWAY_URL`, `VITE_MSGMESH_REALTIME_URL`) to `https://msgmesh-api.alderflux.com`; keep them. For a try on your own machine, `MSGMESH_API_KEY` can be the starter key from the panel's one-click setup; switch to a narrower key before going to production (see "Production security").
+Open `.env` and fill in `MSGMESH_API_KEY` (see "Configuration" below). For a try on your own machine, it can be the starter key from the panel's one-click setup; switch to a narrower key before going to production (see "Production security"). `.env.example` already sets all three addresses (`MSGMESH_CONTROL_PLANE_URL`, `VITE_MSGMESH_GATEWAY_URL`, `VITE_MSGMESH_REALTIME_URL`) to `https://msgmesh-api.alderflux.com`; keep them.
+
+Then bundle the frontend into `dist/` with Vite, and start the token-broker, which also serves `dist/` (default http://localhost:8787):
+
+```bash
+npm run build
+node --env-file=.env server.js
+```
 
 Open http://localhost:8787, enter a nickname, and send a message; open another tab and it receives it in realtime.
 
@@ -116,18 +121,23 @@ Open http://localhost:8787, enter a nickname, and send a message; open another t
 
 ### Hot reload during development
 
-To edit the frontend and see the effect live, open two terminals:
+To edit the frontend and see the effect live, open two terminals. Terminal A runs the token-broker (:8787):
 
 ```bash
-node --env-file=.env server.js   # terminal A: token-broker (:8787)
-npm run dev                       # terminal B: Vite dev server (:5173)
+node --env-file=.env server.js
+```
+
+Terminal B runs the Vite dev server (:5173):
+
+```bash
+npm run dev
 ```
 
 `vite.config.js` already proxies `/api` to `:8787`, so when developing at http://localhost:5173, `/api/token` is forwarded to the backend. (If the ports differ, set `PORT` to keep both sides consistent.)
 
 ### What you need
 
-- A running MsgMesh (see "Common prerequisites" in the repo root README).
+- A MsgMesh account (see "Common prerequisites" in the repo root README).
 - An API key that can both **publish and subscribe** to that topic, placed in the backend `.env` as `MSGMESH_API_KEY` (for a try on your own machine, the starter key from the panel's one-click setup works).
 
 ## Configuration

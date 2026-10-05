@@ -98,12 +98,17 @@ mq.stream(topic, (value, meta) => {
 
 ```bash
 npm install
-cp .env.example .env       # 填入 MSGMESH_API_KEY(見下方「設定」)
-npm run build              # Vite 打包前端到 dist/
-node --env-file=.env server.js   # 起 token-broker + 服務 dist/,預設 http://localhost:8787
+cp .env.example .env
 ```
 
-`.env.example` 已把三個位址(`MSGMESH_CONTROL_PLANE_URL`、`VITE_MSGMESH_GATEWAY_URL`、`VITE_MSGMESH_REALTIME_URL`)都設成 `https://msgmesh-api.alderflux.com`,維持原值即可。在自己電腦上試跑,`MSGMESH_API_KEY` 可以直接填一鍵開箱給的 starter key;上線前要換成權限更窄的 key(見「上線安全」)。
+打開 `.env` 填入 `MSGMESH_API_KEY`(見下方「設定」)。在自己電腦上試跑,可以直接填一鍵開箱給的 starter key;上線前要換成權限更窄的 key(見「上線安全」)。`.env.example` 已把三個位址(`MSGMESH_CONTROL_PLANE_URL`、`VITE_MSGMESH_GATEWAY_URL`、`VITE_MSGMESH_REALTIME_URL`)都設成 `https://msgmesh-api.alderflux.com`,維持原值即可。
+
+接著用 Vite 把前端打包到 `dist/`,再起 token-broker(它同時服務 `dist/`,預設 http://localhost:8787):
+
+```bash
+npm run build
+node --env-file=.env server.js
+```
 
 打開 http://localhost:8787,輸入暱稱、發一則訊息;另開一個分頁會即時收到。
 
@@ -115,18 +120,23 @@ node --env-file=.env server.js   # 起 token-broker + 服務 dist/,預設 http:/
 
 ### 開發時要熱更新
 
-想邊改前端邊即時看效果,開兩個終端:
+想邊改前端邊即時看效果,開兩個終端。終端 A 跑 token-broker(:8787):
 
 ```bash
-node --env-file=.env server.js   # 終端 A:token-broker(:8787)
-npm run dev                       # 終端 B:Vite dev server(:5173)
+node --env-file=.env server.js
+```
+
+終端 B 跑 Vite dev server(:5173):
+
+```bash
+npm run dev
 ```
 
 `vite.config.js` 已把 `/api` 代理到 `:8787`,所以在 http://localhost:5173 開發時,`/api/token` 會轉到後端。(埠不同時設 `PORT` 讓兩邊一致。)
 
 ### 需要什麼
 
-- 一個跑著的 MsgMesh(見 repo 根 README 的「共同前置」)。
+- 一個 MsgMesh 帳號(見 repo 根 README 的「共同前置」)。
 - 一把能對該 topic **同時 publish 與 subscribe** 的 API key,放進後端 `.env` 的 `MSGMESH_API_KEY`(在自己電腦上試跑,用一鍵開箱給的 starter key 即可)。
 
 ## 設定

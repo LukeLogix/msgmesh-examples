@@ -4,7 +4,7 @@
 
 Official examples / starter templates for **MsgMesh** — each folder is a minimal "`clone` and run" starting point that shows how to use the official [`@msgmesh/sdk`](https://www.npmjs.com/package/@msgmesh/sdk) SDK to connect to MsgMesh, the multi-tenant event bus, and send and receive realtime events.
 
-Register in the panel, run its one-click setup (which by default also creates the topics the examples use), put the API key into `.env`, and within minutes you'll have an app that can send and receive messages.
+Register in the panel and run its one-click setup: on a newly registered account, keeping its option ticked (the default) also creates the topics the examples use, while an account that already existed, or one where that option was unticked, has to create them itself (see "Common prerequisites"). Put the API key into `.env`, and within minutes you'll have an app that can send and receive messages.
 
 ## Templates
 

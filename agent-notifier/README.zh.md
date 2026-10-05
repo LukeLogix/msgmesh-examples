@@ -22,17 +22,20 @@
 ## 跑起來
 
 ```bash
-cp .env.example .env      # 填入 MSGMESH_API_KEY
+cp .env.example .env
 npm install
-npm start                 # = node --env-file=.env index.js
 ```
 
-`.env.example` 已把 `MSGMESH_GATEWAY_URL` 設成 `https://msgmesh-api.alderflux.com`,維持原值即可。在自己電腦上試跑,`MSGMESH_API_KEY` 可以直接填一鍵開箱給的 starter key(見根 README「共同前置」)。
-
-啟動後會印一行「訂閱 topic …」,接著每收到一則事件就印出來。要看到效果,在這個資料夾另開一個終端,往 `orders` 發一筆:
+打開 `.env` 填入 `MSGMESH_API_KEY`。在自己電腦上試跑,可以直接填一鍵開箱給的 starter key(見根 README「共同前置」)。`.env.example` 已把 `MSGMESH_GATEWAY_URL` 設成 `https://msgmesh-api.alderflux.com`,維持原值即可。接著啟動(`npm start` 就是 `node --env-file=.env index.js`):
 
 ```bash
-export $(grep -v '^#' .env | xargs)   # 把 .env 的 MSGMESH_API_KEY 載進這個 shell
+npm start
+```
+
+啟動後會印一行「訂閱 topic …」,接著每收到一則事件就印出來。要看到效果,在這個資料夾另開一個終端:下面第一行把 `.env` 的 `MSGMESH_API_KEY` 載進這個 shell,第二行往 `orders` 發一筆。
+
+```bash
+export $(grep -v '^#' .env | xargs)
 curl -X POST https://msgmesh-api.alderflux.com/v1/topics/orders/messages -H "Authorization: Bearer $MSGMESH_API_KEY" -H "Content-Type: application/json" -d '{"item":"test-order"}'
 ```
 

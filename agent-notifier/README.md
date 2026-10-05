@@ -22,17 +22,20 @@ So the platform gates this kind of "whole-topic read" directly: **a poll/consume
 ## Run it
 
 ```bash
-cp .env.example .env      # fill in MSGMESH_API_KEY
+cp .env.example .env
 npm install
-npm start                 # = node --env-file=.env index.js
 ```
 
-`.env.example` already sets `MSGMESH_GATEWAY_URL` to `https://msgmesh-api.alderflux.com`; keep it. For a try on your own machine, the starter key from the panel's one-click setup works as `MSGMESH_API_KEY` (see "Common prerequisites" in the root README).
-
-Once started, it prints a "subscribing to topic …" line, then prints each event as it arrives. To see one, publish an event to `orders` from a second terminal in this folder:
+Open `.env` and fill in `MSGMESH_API_KEY`. For a try on your own machine, the starter key from the panel's one-click setup works (see "Common prerequisites" in the root README). `.env.example` already sets `MSGMESH_GATEWAY_URL` to `https://msgmesh-api.alderflux.com`; keep it. Then start the script (`npm start` runs `node --env-file=.env index.js`):
 
 ```bash
-export $(grep -v '^#' .env | xargs)   # load MSGMESH_API_KEY from .env into this shell
+npm start
+```
+
+Once started, it prints a "subscribing to topic …" line, then prints each event as it arrives. To see one, open a second terminal in this folder: the first line below loads `MSGMESH_API_KEY` from `.env` into that shell, and the second publishes an event to `orders`.
+
+```bash
+export $(grep -v '^#' .env | xargs)
 curl -X POST https://msgmesh-api.alderflux.com/v1/topics/orders/messages -H "Authorization: Bearer $MSGMESH_API_KEY" -H "Content-Type: application/json" -d '{"item":"test-order"}'
 ```
 
