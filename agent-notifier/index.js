@@ -47,6 +47,7 @@ async function handleEvent(msg) {
 }
 
 console.log(`agent-notifier: subscribing to topic "${MSGMESH_TOPIC}" (group=${MSGMESH_GROUP})... press Ctrl-C to quit`);
+console.log("agent-notifier: if this group has not read this topic before, it starts from the oldest message still within the topic's retention, so messages already in the topic arrive first");
 
 // subscribe(topic, opts, handler) → stop function.
 // onError: reports every polling error (the SDK backs off and retries transient errors on its own;

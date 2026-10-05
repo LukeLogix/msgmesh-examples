@@ -32,7 +32,14 @@ Open `.env` and fill in `MSGMESH_API_KEY`. For a try on your own machine, the st
 npm start
 ```
 
-Once started, it prints a "subscribing to topic …" line, then prints each event as it arrives. To see one, open a second terminal in this folder: the first line below loads `MSGMESH_API_KEY` from `.env` into that shell, and the second publishes an event to `orders`.
+Once started, it prints these two lines, then prints each event as it arrives:
+
+```
+agent-notifier: subscribing to topic "orders" (group=agent-notifier)... press Ctrl-C to quit
+agent-notifier: if this group has not read this topic before, it starts from the oldest message still within the topic's retention, so messages already in the topic arrive first
+```
+
+To see an event arrive, open a second terminal in this folder: the first line below loads `MSGMESH_API_KEY` from `.env` into that shell, and the second publishes an event to `orders`.
 
 ```bash
 export $(grep -v '^#' .env | xargs)
@@ -41,7 +48,7 @@ curl -X POST https://msgmesh-api.alderflux.com/v1/topics/orders/messages -H "Aut
 
 The response is `{"partition":…,"offset":…}`, and the event pops up in the first terminal. `Ctrl-C` shuts down gracefully.
 
-A new group starts from the oldest message still within the topic's retention (how long that is depends on your plan). So if you point `MSGMESH_TOPIC` at a topic that already has messages (for example `chat.lobby` after you have used `chat-web`), or switch to a different `MSGMESH_GROUP`, the script first receives the messages that are already there, and each delivery counts toward operations as usual. Restarting with the same group continues from where that group left off.
+The second startup line matters whenever the group is new to the topic (how long the retention is depends on your plan). If you point `MSGMESH_TOPIC` at a topic that already has messages (for example `chat.lobby` after you have used `chat-web`), or switch to a different `MSGMESH_GROUP`, the script first receives the messages that are already there, and each delivery is billed in operations again, as usual (one operation per 16 KiB of the message, counted once when it is published and once more for every delivery). Restarting with the same group continues from where that group left off; a group that has been idle for a long time starts again from the oldest message still within the retention.
 
 ### Running on Node 18
 
