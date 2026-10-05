@@ -134,8 +134,8 @@ function start() {
   // key and checks the token's rooms — outside the allow-set returns 403). The message flows back
   // through the subscription and onMessage renders it (including our own).
   // Both directions use the same word, room: subscribe passes { room }, publish passes { room }
-  // (SDK 0.2.0+; earlier versions called this option key). package.json requires ^0.3.0, the
-  // version that added onMessage's meta argument — see subscribe() for what it buys.
+  // (SDK 0.2.0+; earlier versions called this option key). onMessage's meta argument needs 0.3.0+
+  // (package.json asks for a newer range still) — see subscribe() for what it buys.
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const text = textInput.value.trim();

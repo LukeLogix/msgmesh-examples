@@ -11,7 +11,9 @@ const BROKER_PORT = process.env.PORT || 8787;
 export default defineConfig({
   server: {
     proxy: {
-      "/api": `http://localhost:${BROKER_PORT}`,
+      // 127.0.0.1, not localhost: server.js listens on 127.0.0.1 by default, and on some Node
+      // versions localhost resolves to ::1 first, where nothing is listening.
+      "/api": `http://127.0.0.1:${BROKER_PORT}`,
     },
   },
 });
