@@ -48,7 +48,7 @@ const out = mkdtempSync(join(tmpdir(), 'load-smoke-'));
 // 掛在 process.on('exit') 上,所以**每一條**離開路徑都會經過它——包含失敗時的
 // process.exit(1)。這很重要:第一版只在成功路徑尾端呼叫 proc.kill(),紅燈那次就漏
 // 了一個 headless Chrome(實測到 PPID=1 的孤兒還佔著除錯埠)。GitHub 託管 runner
-// 用完即丟看不出來,但我們的 CI 跑在自架機器上,每次紅燈漏一個會一路累積。
+// 用完即丟看不出來,但在本機或常駐的 runner 上,每次紅燈漏一個會一路累積。
 let chromeProc = null, socket = null, httpServer = null;
 function cleanup() {
   try { socket?.close(); } catch {}
