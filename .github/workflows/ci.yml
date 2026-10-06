@@ -41,11 +41,13 @@ jobs:
           # 範例以「目錄裡有哪個標記檔」歸類:package.json = Node 範例,requirements.txt = Python 範例。
           # mindepth 2 排除 repo 根自己的標記檔(目前沒有,但別讓它日後變成一個空 job)
           # -exec dirname 而非 | xargs dirname:xargs 會被含空白的路徑拆錯(shellcheck SC2038)
+          # 排除的目錄要與下面「恰好一類」那道守門排除的相同(node_modules、scripts、點開頭的目錄):
+          # 這裡多盤到一個,它會進 matrix 卻不在守門的範圍內。
           list() {
             find . -mindepth 2 -maxdepth 2 -name "$1" \
                 -not -path './node_modules/*' \
                 -not -path './scripts/*' \
-                -not -path './.github/*' \
+                -not -path './.*/*' \
                 -exec dirname {} \; \
               | sed 's|^\./||' | sort \
               | jq -R -s -c 'split("\n") | map(select(length > 0))'
@@ -189,7 +191,7 @@ jobs:
       fail-fast: false
       matrix:
         example: ${{ fromJSON(needs.discover.outputs.python_examples) }}
-        # 3.9 = SDK 宣告的下限,也是 macOS 內建的 python3;3.14 = 現行最新穩定版。
+        # 3.9 = SDK 宣告的下限,也是 macOS 上 Xcode Command Line Tools 附的 /usr/bin/python3;3.14 = 現行最新穩定版。
         # 一定要加引號:不加的話 3.10 會被 YAML 讀成數字 3.1。
         python: ['3.9', '3.14']
 
@@ -221,7 +223,7 @@ jobs:
 
       # 只擋語法錯誤,而且擋不到「語法在新版才有」以外的任何事;留著是因為它的錯誤訊息最直接。
       - name: 語法(py_compile)
-        run: .venv/bin/python -m py_compile *.py
+        run: .venv/bin/python -m py_compile ./*.py
 
       # 主閘門。裝得起來、語法也對,仍可能跑起來收不到、401 時無聲卡死、或用了下限版本沒有的寫法
       # (那種只會在 3.9 這一格紅)。腳本只用標準函式庫,不需要憑證、不連外。
@@ -241,6 +243,10 @@ jobs:
         with:
           node-version: 22
       - name: 比對 lockfile 鎖定版本 vs npm 最新版
+        # 清單走 env 傳入、不做 ${{ }} 內插進 script:目錄名含單引號時,內插會把 shell 的引號配對打壞。
+        # 逐行讀而不用 for … in $(…):後者會把含空白的目錄名拆成兩個。
+        env:
+          EXAMPLES: ${{ needs.discover.outputs.examples }}
         run: |
           set -uo pipefail   # 刻意不加 -e:這個 job 不該把任何人擋下來
           latest=$(npm view @msgmesh/sdk version 2>/dev/null || echo "")
@@ -249,7 +255,7 @@ jobs:
             exit 0
           fi
           echo "npm 最新版:@msgmesh/sdk@${latest}"
-          for ex in $(echo '${{ needs.discover.outputs.examples }}' | jq -r '.[]'); do
+          while IFS= read -r ex; do
             lock="${ex}/package-lock.json"
             [ -f "$lock" ] || { echo "· ${ex}:無 lockfile,略過"; continue; }
             locked=$(jq -r '.packages["node_modules/@msgmesh/sdk"].version // empty' "$lock")
@@ -259,9 +265,11 @@ jobs:
             else
               echo "::warning file=${ex}/package.json::${ex} 的 lockfile 鎖在 @msgmesh/sdk@${locked},npm 最新為 ${latest}。若非刻意釘版,請 bump package.json 後重跑 npm install 讓 lockfile 一起更新。"
             fi
-          done
+          done < <(printf '%s' "$EXAMPLES" | jq -r '.[]')
       # Python 範例沒有 lockfile,requirements.txt 釘的確切版本就是使用者會裝到的版本。
       - name: 比對 requirements.txt 釘的版本 vs PyPI 最新版
+        env:
+          PYTHON_EXAMPLES: ${{ needs.discover.outputs.python_examples }}
         run: |
           set -uo pipefail   # 刻意不加 -e:這個 job 不該把任何人擋下來
           latest=$(curl -fsS -m 20 https://pypi.org/pypi/msgmesh/json 2>/dev/null | jq -r '.info.version // empty' 2>/dev/null || echo "")
@@ -270,7 +278,7 @@ jobs:
             exit 0
           fi
           echo "PyPI 最新版:msgmesh ${latest}"
-          for ex in $(echo '${{ needs.discover.outputs.python_examples }}' | jq -r '.[]'); do
+          while IFS= read -r ex; do
             req="${ex}/requirements.txt"
             [ -f "$req" ] || { echo "· ${ex}:無 requirements.txt,略過"; continue; }
             pinned=$(sed -n 's/^msgmesh==\([0-9][0-9.]*\)[[:space:]]*$/\1/p' "$req" | head -n 1)
@@ -280,7 +288,7 @@ jobs:
             else
               echo "::warning file=${req}::${ex} 的 requirements.txt 釘在 msgmesh==${pinned},PyPI 最新為 ${latest}。若非刻意釘版,請改 requirements.txt 的版本並重跑實跑冒煙。"
             fi
-          done
+          done < <(printf '%s' "$PYTHON_EXAMPLES" | jq -r '.[]')
 
   # PR body 裡被反引號(inline code / 程式碼區塊)包住的 Closes/Fixes/Resolves,
   # GitHub 不解析:merge 後 issue 不會自動關,而且沒有任何錯誤訊息——人眼讀起來
