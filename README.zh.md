@@ -2,7 +2,7 @@
 
 # msgmesh-examples
 
-**MsgMesh** 的官方範例／樣板集合 —— 每個資料夾都是一個「`clone` 就能跑」的最小起手式,示範如何用官方 SDK(JavaScript 用 npm 的 [`@msgmesh/sdk`](https://www.npmjs.com/package/@msgmesh/sdk),Python 用 PyPI 的 [`msgmesh`](https://pypi.org/project/msgmesh/))接入 MsgMesh 這個多租戶事件總線,收發即時事件。
+**MsgMesh** 的官方範例／樣板集合 —— 每個資料夾都是一個「`clone` 就能跑」的最小起手式,示範如何用官方 SDK(JavaScript 用 npm 的 [`@msgmesh/sdk`](https://www.npmjs.com/package/@msgmesh/sdk),Python 用 PyPI 的 [`msgmesh`](https://pypi.org/project/msgmesh/))接入 MsgMesh 這個多租戶事件總線:`chat-web` 在瀏覽器收發即時事件,兩個 `agent-notifier` 腳本以長輪詢接收事件。
 
 在面板註冊並按一鍵開箱:新註冊的帳號維持預設勾選,就會一併建好範例要用的 topic;既有帳號、或當時沒勾選的人,則要自行建立(見「共同前置」)。再把 API key 填進 `.env`,幾分鐘內就有一個能收發訊息的應用。
 

@@ -48,6 +48,8 @@ curl -X POST https://msgmesh-api.alderflux.com/v1/topics/orders/messages -H "Aut
 
 回應是 `{"partition":…,"offset":…}`,第一個終端就會跳出這筆事件。`Ctrl-C` 優雅結束。
 
+預設情況下,topic 不存在(或 `MSGMESH_TOPIC` 的名稱打錯)時,收的這一邊不會報錯,腳本只是一直沒有事件;訊號是上面那條 `curl`:topic 還沒建的話,它得到的是錯誤(HTTP 404,topic not found)。
+
 第二行講的是 group 第一次讀這個 topic 的情況(保留期多長由方案決定)。把 `MSGMESH_TOPIC` 指到已經有訊息的 topic(例如用過 `chat-web` 之後的 `chat.lobby`)、或換一個 `MSGMESH_GROUP`,啟動後會先收到既有的訊息,每次投遞照常再計一次 operations(訊息每 16 KiB 算 1 個 operation,發布時算一次、每次投遞再算一次)。同一個 group 重啟則從上次的位置接續;閒置很久的 group 會重新從保留期內最舊的訊息開始。
 
 ### Node 18 跑法

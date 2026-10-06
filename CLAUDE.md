@@ -1,10 +1,10 @@
 # msgmesh-examples — MsgMesh 官方範例集
 
-**MsgMesh**(多租戶事件總線)的官方範例／樣板集合。每個資料夾都是「`clone` 就能跑」的最小起手式,示範如何用官方 SDK(npm 的 [`@msgmesh/sdk`](https://www.npmjs.com/package/@msgmesh/sdk)、PyPI 的 [`msgmesh`](https://pypi.org/project/msgmesh/))接入、收發即時事件。
+**MsgMesh**(多租戶事件總線)的官方範例／樣板集合。每個資料夾都是「`clone` 就能跑」的最小起手式,示範如何用官方 SDK(npm 的 [`@msgmesh/sdk`](https://www.npmjs.com/package/@msgmesh/sdk)、PyPI 的 [`msgmesh`](https://pypi.org/project/msgmesh/))接入:`chat-web` 在瀏覽器收發即時事件,兩個 `agent-notifier` 腳本(Node 與 Python)只收不發、走長輪詢。
 
 ## 現有範例
 - `agent-notifier/` — Node 腳本:用 SDK `subscribe()` 訂閱 topic、收到事件就處理(給 AI agent / 後端的事件監看層)。
-- `agent-notifier-python/` — `agent-notifier` 的 Python 版:用 PyPI `msgmesh` 的 `subscribe()`,`.env` 由 `main.py` 自己讀(標準函式庫),依賴以 `requirements.txt` 釘住。正常路徑與 Node 版相同,差別列在它的 README;最低 Python 3.9(macOS 內建的 python3),**不得用 3.10 之後才有的語法**。
+- `agent-notifier-python/` — `agent-notifier` 的 Python 版:用 PyPI `msgmesh` 的 `subscribe()`,`.env` 由 `main.py` 自己讀(標準函式庫),依賴以 `requirements.txt` 釘住。正常路徑與 Node 版相同,差別列在它的 README;最低 Python 3.9(macOS 的 `/usr/bin/python3` 就是這一版,它來自 Xcode Command Line Tools,不是系統內建),**不得用 3.10 之後才有的語法**。
 - `chat-web/` — 網頁聊天室(Vite),附**最小 token-broker 後端**(`server.js` 持 key、向平台鑄 5 分鐘降權 token),前端零長期 key;示範 SSE/WS 收發與多房間(room)隔離。
 
 ## 給貢獻者 / AI 助手的準則
@@ -19,7 +19,7 @@
 
 守的是「`clone` 就能跑」這句承諾:每個 Node 範例都要 `npm ci` 裝得起來、建得出宣告的產物、且呼叫的 SDK 方法在**實際裝到的那版**上存在;每個 Python 範例都要照 README 裝得起來,並對本機的假 gateway 真的跑過一次。
 
-範例清單由 CI **從檔案系統盤點**,以目錄裡的標記檔歸類:有 `package.json` 的是 Node 範例,有 `requirements.txt` 的是 Python 範例。新增這兩類目錄不必改 workflow。**每個頂層目錄(`scripts/` 與點開頭的除外)都必須被歸到恰好一類**:兩種標記都沒有、或兩種都有,`discover` 直接紅。所以要加第三種語言的範例,得先在 workflow 補上盤點規則與對應的 job;要加不是範例的頂層目錄,得先在 `discover` 的排除清單明講。
+範例清單由 CI **從檔案系統盤點**,以目錄裡的標記檔歸類:有 `package.json` 的是 Node 範例,有 `requirements.txt` 的是 Python 範例。新增這兩類目錄不必改 workflow。**每個頂層目錄(`scripts/`、`node_modules/` 與點開頭的除外)都必須被歸到恰好一類**:兩種標記都沒有、或兩種都有,`discover` 直接紅。所以要加第三種語言的範例,得先在 workflow 補上盤點規則與對應的 job;要加不是範例的頂層目錄,得先在 `discover` 的排除清單明講。
 
 ### Node 範例:`.ci-expect.json`
 
@@ -41,7 +41,8 @@
 Python 範例沒有建置步驟、也沒有 lockfile,`python-example` job(Python 3.9 與 3.14)照 README 建 venv 安裝後跑 `pip check`、`py_compile`,再跑 `scripts/py-run-smoke.py`:
 
 - **`requirements.txt` 第一行必須是 `msgmesh==X.Y.Z`**(確切版本),而且裝到的就是那一版——這一行就是 lockfile,不得改成範圍。另一行給 `httpx` 上限(SDK 自己沒給;`httpx` 1.x 的開發版會讓 0.6.0 一啟動就 `TypeError`)。升 SDK 版本時兩行一起重看。
-- 腳本把範例複製到暫存目錄,對一個本機的假 gateway 實跑各種情境:正常收訊與 `Ctrl-C` / SIGTERM、啟動那兩行逐字、預設值與環境變數優先、設定有問題時不送請求就結束、401 / 403 / 404 結束、其他錯誤持續重試且不洗版、處理函式丟例外不拖掉同批其餘訊息。不需要憑證、不連外。
+- 腳本把範例複製到暫存目錄,對一個本機的假 gateway 實跑各種情境:正常收訊與 `Ctrl-C` / SIGTERM(結束前等手上那一則)、啟動那兩行逐字、預設值與環境變數優先、設定有問題時(key 沒填或夾帶空白、位址沒有協定、`.env` 不是 UTF-8 或讀不了)不送請求就結束、400 / 401 / 403 / 404 結束、錯誤文字裡的 key 遮成 `***`、其他錯誤持續重試且不洗版、處理函式丟例外不拖掉同批其餘訊息、stdout 被關掉時安靜結束。不需要憑證。
+- **不連外是做出來的**:子行程的 `HTTP(S)_PROXY` 一律指到腳本自己開的本機攔截點(回 502 就斷線)。範例的設定讀取壞掉而落回內建的正式位址時,連線在攔截點結束,那個情境會因「試圖連外」變紅。改這支腳本時不要拿掉這一層——拿掉之後,範例一壞,冒煙就會帶著假 key 去打正式環境。
 - 本機跑法:在範例目錄用裝過 `requirements.txt` 的直譯器執行 `python ../scripts/py-run-smoke.py`。改了 `main.py` 的行為(訊息字樣、預設值、結束條件)就要一起改這支腳本的斷言與兩份 README。
 - 這個 job 只在 Linux 跑;README 的指令也只寫 macOS / Linux。
 

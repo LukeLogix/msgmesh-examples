@@ -48,6 +48,8 @@ curl -X POST https://msgmesh-api.alderflux.com/v1/topics/orders/messages -H "Aut
 
 The response is `{"partition":…,"offset":…}`, and the event pops up in the first terminal. `Ctrl-C` shuts down gracefully.
 
+By default, when the topic does not exist (or its name is misspelled in `MSGMESH_TOPIC`), the receiving side reports no error and the script simply never shows an event; the signal is the `curl` above, which is answered with an error (HTTP 404, topic not found) when the topic has not been created.
+
 The second startup line matters whenever the group is new to the topic (how long the retention is depends on your plan). If you point `MSGMESH_TOPIC` at a topic that already has messages (for example `chat.lobby` after you have used `chat-web`), or switch to a different `MSGMESH_GROUP`, the script first receives the messages that are already there, and each delivery is counted in operations again, as usual (one operation per 16 KiB of the message: once when it is published and once more for every delivery). Restarting with the same group continues from where that group left off; a group that has been idle for a long time starts again from the oldest message still within the retention.
 
 ### Running on Node 18

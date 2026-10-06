@@ -2,7 +2,7 @@
 
 # msgmesh-examples
 
-Official examples / starter templates for **MsgMesh** — each folder is a minimal "`clone` and run" starting point that shows how to use an official SDK ([`@msgmesh/sdk`](https://www.npmjs.com/package/@msgmesh/sdk) on npm for JavaScript, [`msgmesh`](https://pypi.org/project/msgmesh/) on PyPI for Python) to connect to MsgMesh, the multi-tenant event bus, and send and receive realtime events.
+Official examples / starter templates for **MsgMesh** — each folder is a minimal "`clone` and run" starting point that shows how to use an official SDK ([`@msgmesh/sdk`](https://www.npmjs.com/package/@msgmesh/sdk) on npm for JavaScript, [`msgmesh`](https://pypi.org/project/msgmesh/) on PyPI for Python) to connect to MsgMesh, the multi-tenant event bus: `chat-web` sends and receives realtime events in the browser, and the two `agent-notifier` scripts receive events by long-polling.
 
 Register in the panel and run its one-click setup: on a newly registered account, keeping its option ticked (the default) also creates the topics the examples use, while an account that already existed, or one where that option was unticked, has to create them itself (see "Common prerequisites"). Put the API key into `.env`, and within minutes you'll have an app that can send and receive messages.
 
