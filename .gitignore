@@ -3,6 +3,10 @@ node_modules/
 dist/
 .vite/
 
+# Python 範例:本機的虛擬環境與位元組碼快取
+.venv/
+__pycache__/
+
 # 祕密:只保留 .env.example,實際 .env 一律不進版控
 .env
 .env.*
