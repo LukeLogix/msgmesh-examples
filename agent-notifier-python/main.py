@@ -199,12 +199,12 @@ def main():
     def output_closed():
         # Whatever was reading our output went away (for example `python main.py | head -1`).
         # Nothing more can be printed, so stop quietly instead of treating it as a handler error.
-        finish("output closed", 1)
         try:
-            # Point stdout at /dev/null so the flush Python does at exit has somewhere to go.
+            # Point stdout at /dev/null first, so the flush Python does at exit has somewhere to go.
             os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
         except (OSError, ValueError):
             pass
+        finish("output closed", 1)
 
     def give_up(text):
         complain(text + key_source_note())
