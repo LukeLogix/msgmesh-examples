@@ -17,13 +17,14 @@ import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
-from msgmesh import AuthError, MsgMesh, NotFoundError
+from msgmesh import AuthError, MsgMesh, NotFoundError, ValidationError
 
 NAME = "agent-notifier-python"
 SERVICE_URL = "https://msgmesh-api.alderflux.com"
 PLACEHOLDER_KEY = "replace-me"
 # While the SDK keeps retrying, the same kind of error is printed at most once per this many seconds.
 ERROR_REPEAT_SECONDS = 30
+SHORTEST_REDACTED_KEY = 8  # see redact()
 
 
 def read_env_file(path):
@@ -31,13 +32,21 @@ def read_env_file(path):
 
     Deliberately minimal: blank lines and lines starting with # are skipped, a leading "export "
     is dropped, and one pair of surrounding quotes is removed. There are no end-of-line comments:
-    everything after the = is the value. If you need more than this, use the python-dotenv package.
+    the value runs to the end of the line (only the whitespace around it and that one pair of quotes
+    are removed). If you need more than this, use the python-dotenv package.
+
+    Raises UnicodeError when the file is not UTF-8 text, and OSError when it cannot be read.
     """
     values = {}
     if not path.is_file():
         return values
     # utf-8-sig: some editors put a byte-order mark at the start of the file.
-    for raw in path.read_text(encoding="utf-8-sig").splitlines():
+    text = path.read_text(encoding="utf-8-sig")
+    if "\x00" in text:
+        # UTF-16 without a byte-order mark decodes as UTF-8 "successfully", with a NUL after every
+        # character; a NUL can never be part of an environment variable either.
+        raise UnicodeError("NUL character in .env")
+    for raw in text.splitlines():
         line = raw.strip()
         if line.startswith("export "):
             line = line[len("export "):].lstrip()
@@ -45,6 +54,8 @@ def read_env_file(path):
             continue
         name, value = line.split("=", 1)
         name, value = name.strip(), value.strip()
+        if not name:
+            continue  # a line like "=foo" names no variable
         if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
             value = value[1:-1]
         values[name] = value
@@ -54,8 +65,13 @@ def read_env_file(path):
 # .env sits next to this file, so the script works from any working directory.
 try:
     FILE_VALUES = read_env_file(Path(__file__).resolve().parent / ".env")
-except UnicodeDecodeError:
+except UnicodeError:
     sys.exit(f"{NAME}: .env is not UTF-8 text. Save it as UTF-8 and start again.")
+except OSError as _err:
+    sys.exit(
+        f"{NAME}: .env could not be read ({_err.strerror or _err}). Check that your user is allowed "
+        "to read the file, then start again."
+    )
 
 # A variable that is already set in the environment wins over the file, like Node's --env-file.
 for _name, _value in FILE_VALUES.items():
@@ -77,8 +93,22 @@ def say(text):
     print(text, flush=True)
 
 
+def redact(text):
+    """Replaces the API key with *** wherever it appears in text.
+
+    Error text written by libraries can quote the request, Authorization header included. Keys
+    shorter than SHORTEST_REDACTED_KEY characters are left alone: no real key is that short, and
+    replacing, say, every "a" would only make the message unreadable.
+    """
+    forms = {API_KEY, API_KEY.strip(), repr(API_KEY)[1:-1]}
+    for form in sorted(forms, key=len, reverse=True):
+        if len(form) >= SHORTEST_REDACTED_KEY:
+            text = text.replace(form, "***")
+    return text
+
+
 def complain(text):
-    print(text, file=sys.stderr, flush=True)
+    print(redact(text), file=sys.stderr, flush=True)
 
 
 def config_problem():
@@ -93,6 +123,11 @@ def config_problem():
             f"{NAME}: MSGMESH_API_KEY contains a character that is not plain ASCII (often an "
             "ellipsis or an invisible character picked up while copying). Copy the key again."
         )
+    if not API_KEY.isprintable() or any(ch.isspace() for ch in API_KEY):
+        return (
+            f"{NAME}: MSGMESH_API_KEY contains whitespace or a control character (a space, a tab or "
+            "a line break, often picked up while copying). Copy the key again."
+        )
     if not GATEWAY_URL.startswith(("http://", "https://")):
         return (
             f"{NAME}: MSGMESH_GATEWAY_URL must start with https:// or http:// "
@@ -106,6 +141,12 @@ def key_source_note():
     in_file = FILE_VALUES.get("MSGMESH_API_KEY")
     if in_file is None or in_file == API_KEY:
         return ""
+    if not in_file or in_file == PLACEHOLDER_KEY:
+        # Nothing usable in .env, so "use the key in .env" would be the wrong advice.
+        return (
+            "\n  Note: the key in use comes from the MSGMESH_API_KEY environment variable; the one "
+            "in .env is not filled in."
+        )
     return (
         "\n  Note: the key in use comes from the MSGMESH_API_KEY environment variable, not from "
         ".env (a variable that is already set wins over the file). Unset it, or open a new "
@@ -141,18 +182,35 @@ def main():
     mq = MsgMesh(api_key=API_KEY, gateway_url=GATEWAY_URL)
 
     done = threading.Event()  # set when the script should end
-    state = {"exit_code": 0}
+    state = {"exit_code": 0, "why": None}
     retried = {}  # kind of error -> [how many so far, when it was last printed]
+    # Printing happens on two threads: the SDK's background thread (events, errors) and the main
+    # thread (the last line before exiting). Both print only while holding this lock, and the
+    # background thread first checks that the script is not ending. Without that, the main thread
+    # could leave while the other one is in the middle of a print, and the interpreter can abort
+    # at shutdown when a daemon thread still holds the lock of sys.stdout.
+    printing = threading.Lock()
+
+    def finish(why, exit_code):
+        if not done.is_set():
+            state["why"], state["exit_code"] = why, exit_code
+            done.set()
+
+    def output_closed():
+        # Whatever was reading our output went away (for example `python main.py | head -1`).
+        # Nothing more can be printed, so stop quietly instead of treating it as a handler error.
+        finish("output closed", 1)
+        try:
+            # Point stdout at /dev/null so the flush Python does at exit has somewhere to go.
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        except (OSError, ValueError):
+            pass
 
     def give_up(text):
         complain(text + key_source_note())
-        state["exit_code"] = 1
-        done.set()
+        finish("gave up", 1)
 
-    def on_error(err):
-        # Runs on the SDK's background thread, once per failed poll.
-        if done.is_set():
-            return
+    def report(err):
         status = getattr(err, "status", None)
         if isinstance(err, AuthError) and status == 401:
             # The SDK stops polling for good on a 401, so staying alive would only look like a hang.
@@ -171,10 +229,26 @@ def main():
                 f"server's reason is on the next line.\n  {err}"
             )
         elif isinstance(err, NotFoundError):
+            # Only an account that has turned on "strict topics" in the panel gets here for a topic
+            # that does not exist. By default the platform answers a subscription to a missing
+            # topic with 200 and an empty list, so this script just keeps waiting, the same as for
+            # a topic with no events yet. (Publishing to a missing topic is a 404 either way.)
             give_up(
-                f'{NAME}: the platform answered that topic "{TOPIC}" was not found (HTTP 404). '
-                "Create it in the panel, or point MSGMESH_TOPIC at a topic that exists. The "
+                f'{NAME}: {GATEWAY_URL} answered that topic "{TOPIC}" was not found (HTTP 404). '
+                "Either this account requires topics to be created first (the strict topics "
+                "setting in the panel) and this topic does not exist yet: create it in the panel, "
+                "or point MSGMESH_TOPIC at one that exists. Or MSGMESH_GATEWAY_URL is not the "
+                f"MsgMesh service address ({SERVICE_URL}) and something else answered. The "
                 f"server's reason is on the next line.\n  {err}"
+            )
+        elif isinstance(err, ValidationError):
+            # 400 (or 422): the request itself is not acceptable, so the same request can never
+            # succeed. The usual cause is a topic name the platform does not allow.
+            give_up(
+                f'{NAME}: the platform rejected the request for topic "{TOPIC}" as invalid '
+                f"(HTTP {status}). Usually the topic name is not an allowed one: check "
+                "MSGMESH_TOPIC. A value in .env runs to the end of its line, so do not put a "
+                f"comment after it. The server's reason is on the next line.\n  {err}"
             )
         else:
             # Anything else (network trouble, 5xx, rate limiting): the SDK waits and retries on its
@@ -193,22 +267,45 @@ def main():
                     f"{ERROR_REPEAT_SECONDS} seconds: {err}"
                 )
 
-    def on_message(msg):
-        try:
-            handle_event(msg)
-        except Exception:
-            # Without this, the SDK would hand the exception to on_error and skip the rest of the
-            # batch it had already fetched; those messages are not delivered again.
-            traceback.print_exc()
+    def on_error(err):
+        # Runs on the SDK's background thread, once per failed poll.
+        with printing:
+            if done.is_set():
+                return
+            try:
+                report(err)
+            except BrokenPipeError:
+                output_closed()
 
-    say(f'{NAME}: subscribing to topic "{TOPIC}" (group={GROUP})... press Ctrl-C to quit')
-    say(
-        f"{NAME}: if this group has not read this topic before, it starts from the oldest message "
-        "still within the topic's retention, so messages already in the topic arrive first"
-    )
+    def on_message(msg):
+        # Runs on the SDK's background thread, once per message.
+        with printing:
+            if done.is_set():
+                return
+            try:
+                handle_event(msg)
+            except BrokenPipeError:
+                output_closed()
+            except Exception:
+                # Without this, the SDK would hand the exception to on_error and skip the rest of
+                # the batch it had already fetched; those messages are not delivered again.
+                try:
+                    complain(traceback.format_exc().rstrip("\n"))
+                except BrokenPipeError:
+                    output_closed()
+
+    try:
+        say(f'{NAME}: subscribing to topic "{TOPIC}" (group={GROUP})... press Ctrl-C to quit')
+        say(
+            f"{NAME}: if this group has not read this topic before, it starts from the oldest "
+            "message still within the topic's retention, so messages already in the topic arrive first"
+        )
+    except BrokenPipeError:
+        output_closed()
+        return state["exit_code"]
 
     # SIGTERM (docker stop, a process manager) ends the script the same way Ctrl-C does.
-    signal.signal(signal.SIGTERM, lambda signum, frame: done.set())
+    signal.signal(signal.SIGTERM, lambda signum, frame: finish("SIGTERM", 0))
 
     # subscribe(topic, handler, group=..., on_error=...) returns immediately; the polling runs on a
     # daemon thread, so the main thread has to stay alive until it is time to stop.
@@ -217,12 +314,19 @@ def main():
     try:
         while not done.wait(0.5):
             pass
-        if state["exit_code"] == 0:
-            say("\nReceived SIGTERM, stopping the subscription.")
     except KeyboardInterrupt:
-        say("\nReceived Ctrl-C, stopping the subscription.")
-    done.set()
+        finish("Ctrl-C", 0)
     stop()
+    try:
+        # Taking the lock waits for a message that is being handled right now; after that the
+        # background thread prints nothing more (it sees that the script is ending).
+        with printing:
+            if state["why"] in ("SIGTERM", "Ctrl-C"):
+                say(f"\nReceived {state['why']}, stopping the subscription.")
+    except BrokenPipeError:
+        output_closed()
+    except KeyboardInterrupt:
+        pass  # a second Ctrl-C while a slow handler is still running: leave now
     return state["exit_code"]
 
 
