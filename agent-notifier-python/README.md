@@ -83,7 +83,7 @@ If whatever reads the script's output goes away (for example when the output is 
 ### How it differs from the Node version
 
 - **Default group.** `agent-notifier-python`, not `agent-notifier`. Instances in the same group share the messages; with one name for both, running the two examples at once would show each event in only one of them.
-- **HTTP 400 / 401 / 403 / 404.** On a 401 both versions end: the Node version prints one line and exits with code 0; this one prints the reason and exits with code 1 (the Python SDK stops polling for good on a 401, so a script that stayed alive would sit there doing nothing). With a key that cannot read the topic (403), the Node version prints an error line every second and keeps retrying; this one prints the reason and exits. A 400, and a 404 (which only a strict-topics account gets for a missing topic), go the same way as the 403 in both versions. A 403 is not always permanent, so in a long-running worker you may prefer to keep retrying: change the 403 branch of `report` in `main.py` so that it prints instead of calling `give_up`.
+- **HTTP 400 / 401 / 403 / 404.** On a 401 both versions end: the Node version prints one line and exits with code 0; this one prints the reason and exits with code 1 (the Python SDK stops polling for good on a 401, so a script that stayed alive would sit there doing nothing). With a key that cannot read the topic (403), the Node version keeps retrying and prints an error line on each attempt, waiting longer after each consecutive failure (up to a second at first, doubling up to 30 seconds; `@msgmesh/sdk` 0.7.0); this one prints the reason and exits. A 400, and a 404 (which only a strict-topics account gets for a missing topic), go the same way as the 403 in both versions. A 403 is not always permanent, so in a long-running worker you may prefer to keep retrying: change the 403 branch of `report` in `main.py` so that it prints instead of calling `give_up`.
 - **A key that is still `replace-me` counts as missing**, and the key and the address are checked before any request is sent. The Node version only checks that the key is not empty.
 - **`MSGMESH_GATEWAY_URL` has a default.** When the variable is not set at all, `main.py` uses `https://msgmesh-api.alderflux.com`.
 - **`.env` is read by `main.py`**, not by the runtime (`node --env-file`).
@@ -104,10 +104,10 @@ Edit `handle_event(msg)` in `main.py`: `msg.value` is the raw string (the exampl
 
 The handler runs on the SDK's background thread, one message at a time, so a slow handler delays the next poll. The SDK is synchronous; inside an async framework, run it in an executor yourself.
 
-If `handle_event` raises, the script prints the traceback and goes on with the next message. That comes from the `try` in `on_message`: without it, the SDK (0.6.0) hands the exception to `on_error` and skips the rest of the batch it had already fetched, and those messages are not delivered again. Either way, a message whose handling failed is not retried.
+If `handle_event` raises, the script prints the traceback and goes on with the next message. That comes from the `try` in `on_message`: without it, the SDK (0.7.0) hands the exception to `on_error` and skips the rest of the batch it had already fetched, and those messages are not delivered again. Either way, a message whose handling failed is not retried.
 
 ## Files
 
 - `main.py` — reads `.env`, checks the settings, watches with `subscribe()`, processes events, stops on `Ctrl-C` or SIGTERM.
-- `requirements.txt` — the SDK pinned to an exact version (there is no lockfile, so that line decides which SDK you get), and an upper bound for `httpx`, the HTTP client the SDK uses.
+- `requirements.txt` — the SDK pinned to an exact version (there is no lockfile, so that line decides which SDK you get).
 - `.env.example` — config template (copy it to `.env`).

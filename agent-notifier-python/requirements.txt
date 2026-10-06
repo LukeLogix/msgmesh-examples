@@ -1,6 +1,6 @@
-msgmesh==0.6.0
-httpx>=0.27,<1
+msgmesh==0.7.0
 # msgmesh: the MsgMesh SDK, pinned to an exact version. There is no lockfile here, so the first line
 # is what decides which SDK you get; CI installs it and runs the example against that version.
-# httpx: the HTTP client the SDK uses. The SDK itself only asks for >=0.27; the upper bound keeps a
-# future 1.x, which this SDK version has not been run against, from being installed.
+# httpx, the HTTP client the SDK uses, is not listed: the SDK (0.7.0 and later) declares its own
+# range for it (>=0.27,<1), so a future httpx 1.x, which this SDK version has not been run against,
+# is not installed.
