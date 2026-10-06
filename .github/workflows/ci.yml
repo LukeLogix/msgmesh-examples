@@ -2,6 +2,7 @@ name: CI
 
 # 本 repo 是唯一對外公開的 repo,承諾「clone 就能跑」。這支 CI 守的就是那句話:
 # 每個範例都必須裝得起來、建置得出產物、而且它呼叫的 SDK API 在「實際裝到的那版」上存在。
+# Python 範例不經建置,改成對一個本機的假 gateway 真的跑一次(見 python-example)。
 #
 # 由來:chat-web 的 package.json 在 2026-08-04(#7)bump 到 @msgmesh/sdk ^0.2.0,
 # package-lock.json 沒跟著重產,`npm ci` 直接 EUSAGE 報錯。公開範例壞了 16 天沒人發現,
@@ -31,26 +32,60 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       examples: ${{ steps.list.outputs.examples }}
+      python_examples: ${{ steps.list.outputs.python_examples }}
     steps:
       - uses: actions/checkout@v4
       - id: list
         run: |
           set -euo pipefail
-          # mindepth 2 排除 repo 根自己的 package.json(目前沒有,但別讓它日後變成一個空 job)
+          # 範例以「目錄裡有哪個標記檔」歸類:package.json = Node 範例,requirements.txt = Python 範例。
+          # mindepth 2 排除 repo 根自己的標記檔(目前沒有,但別讓它日後變成一個空 job)
           # -exec dirname 而非 | xargs dirname:xargs 會被含空白的路徑拆錯(shellcheck SC2038)
-          examples=$(find . -mindepth 2 -maxdepth 2 -name package.json \
-              -not -path './node_modules/*' \
-              -not -path './scripts/*' \
-              -not -path './.github/*' \
-              -exec dirname {} \; \
+          list() {
+            find . -mindepth 2 -maxdepth 2 -name "$1" \
+                -not -path './node_modules/*' \
+                -not -path './scripts/*' \
+                -not -path './.github/*' \
+                -exec dirname {} \; \
+              | sed 's|^\./||' | sort \
+              | jq -R -s -c 'split("\n") | map(select(length > 0))'
+          }
+          examples=$(list package.json)
+          python_examples=$(list requirements.txt)
+          if [ "$examples" = "[]" ]; then
+            echo "::error::找不到任何 Node 範例目錄(以 package.json 辨認)—— 偵測規則壞了,不是真的沒有範例"
+            exit 1
+          fi
+          if [ "$python_examples" = "[]" ]; then
+            echo "::error::找不到任何 Python 範例目錄(以 requirements.txt 辨認)—— 偵測規則壞了,或標記檔被刪了"
+            exit 1
+          fi
+          # 每個頂層目錄都必須被歸到「恰好一類」。兩份清單各自非空還不夠:
+          #   · 一類都不是 —— 新增了第三種語言的範例卻沒有對應的 job,它會被完全略過而 CI 全綠
+          #     (這次加 Python 範例時,舊的盤點規則就是這樣:新目錄不出現、也沒有任何錯誤);
+          #     某個範例的標記檔被刪掉也會落到這裡。
+          #   · 兩類都是 —— 兩個 job 各跑一半,哪一邊的守門都不完整。
+          # 不是範例的頂層目錄只有 scripts/(與點開頭的目錄);要新增別的,得先來這裡明講。
+          dirs=$(find . -mindepth 1 -maxdepth 1 -type d \
+              -not -name '.*' -not -name scripts -not -name node_modules \
             | sed 's|^\./||' | sort \
             | jq -R -s -c 'split("\n") | map(select(length > 0))')
-          if [ "$examples" = "[]" ]; then
-            echo "::error::找不到任何範例目錄 —— 偵測規則壞了,不是真的沒有範例"
+          neither=$(jq -n -c --argjson dirs "$dirs" --argjson node "$examples" --argjson py "$python_examples" \
+            '$dirs | map(select(. as $d | (($node | any(. == $d)) or ($py | any(. == $d))) | not))')
+          both=$(jq -n -c --argjson dirs "$dirs" --argjson node "$examples" --argjson py "$python_examples" \
+            '$dirs | map(select(. as $d | ($node | any(. == $d)) and ($py | any(. == $d))))')
+          if [ "$neither" != "[]" ]; then
+            echo "::error::這些頂層目錄沒有被歸成任何一類範例(沒有 package.json 也沒有 requirements.txt):$neither —— 要嘛標記檔被刪了,要嘛是新語言的範例,得先在這支 workflow 補上盤點規則與對應的 job"
+            exit 1
+          fi
+          if [ "$both" != "[]" ]; then
+            echo "::error::這些頂層目錄同時有 package.json 與 requirements.txt:$both —— 一個範例只能屬於一類"
             exit 1
           fi
           echo "examples=$examples" >> "$GITHUB_OUTPUT"
-          echo "偵測到範例:$examples"
+          echo "python_examples=$python_examples" >> "$GITHUB_OUTPUT"
+          echo "偵測到 Node 範例:$examples"
+          echo "偵測到 Python 範例:$python_examples"
 
   example:
     needs: discover
@@ -140,6 +175,59 @@ jobs:
         if: matrix.node != 22
         run: echo "· node ${{ matrix.node }}:頁面載入冒煙只跑在 matrix 最新的 Node(需要 Node ≥ 21 的全域 WebSocket)。本組合略過 —— 略過不等於通過。"
 
+  # Python 範例。沒有建置步驟、也沒有 lockfile,所以守法不同:
+  #   · requirements.txt 第一行的確切版本就是 lockfile(冒煙腳本開頭會擋範圍寫法與「裝到的不是那一版」);
+  #   · 範例只打一支 HTTP 端點,假得起來,所以不做靜態掃描,直接對本機的假 gateway 跑。
+  python-example:
+    needs: discover
+    name: ${{ matrix.example }} · python ${{ matrix.python }}
+    # 固定 24.04 而不用 ubuntu-latest:設計這個 job 時查到 actions/python-versions 沒有 3.9 在 26.04 上的
+    # 建置,ubuntu-latest 哪天換過去,3.9 那一格會在 setup-python 就紅。要升 runner 時連同下限一起決定。
+    runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        example: ${{ fromJSON(needs.discover.outputs.python_examples) }}
+        # 3.9 = SDK 宣告的下限,也是 macOS 內建的 python3;3.14 = 現行最新穩定版。
+        # 一定要加引號:不加的話 3.10 會被 YAML 讀成數字 3.1。
+        python: ['3.9', '3.14']
+
+    defaults:
+      run:
+        working-directory: ${{ matrix.example }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 刻意不開 pip 快取:這一步要驗的就是「今天照 README 裝,裝不裝得起來」。
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      # 與 README 的安裝指令相同。pip check 擋依賴彼此衝突;版本那一行擋「這一格其實跑在別的 Python 上」。
+      - name: 安裝(照 README:venv + pip install -r requirements.txt)
+        run: |
+          set -euo pipefail
+          python3 -m venv .venv
+          .venv/bin/python -m pip install -r requirements.txt
+          .venv/bin/python -m pip check
+          .venv/bin/python -m pip list
+          actual=$(.venv/bin/python -c 'import sys; print("%d.%d" % sys.version_info[:2])')
+          if [ "$actual" != "${{ matrix.python }}" ]; then
+            echo "::error::venv 裡的 Python 是 ${actual},這一格應該是 ${{ matrix.python }}"
+            exit 1
+          fi
+
+      # 只擋語法錯誤,而且擋不到「語法在新版才有」以外的任何事;留著是因為它的錯誤訊息最直接。
+      - name: 語法(py_compile)
+        run: .venv/bin/python -m py_compile *.py
+
+      # 主閘門。裝得起來、語法也對,仍可能跑起來收不到、401 時無聲卡死、或用了下限版本沒有的寫法
+      # (那種只會在 3.9 這一格紅)。腳本只用標準函式庫,不需要憑證、不連外。
+      - name: 實跑冒煙(對本機的假 gateway)
+        run: .venv/bin/python ../scripts/py-run-smoke.py
+
   # 諮詢性質,刻意獨立成一個 job 且不列入 ci-ok:範例釘在舊版 SDK 可能是刻意的,
   # 落後一版不是缺陷。但必須看得見,否則公開範例會安靜地爛掉。
   # 直接讀 lockfile 而不安裝 —— lockfile 鎖到什麼版本,使用者 npm ci 就拿到什麼版本。
@@ -170,6 +258,27 @@ jobs:
               echo "✓ ${ex}:${locked} 已是最新"
             else
               echo "::warning file=${ex}/package.json::${ex} 的 lockfile 鎖在 @msgmesh/sdk@${locked},npm 最新為 ${latest}。若非刻意釘版,請 bump package.json 後重跑 npm install 讓 lockfile 一起更新。"
+            fi
+          done
+      # Python 範例沒有 lockfile,requirements.txt 釘的確切版本就是使用者會裝到的版本。
+      - name: 比對 requirements.txt 釘的版本 vs PyPI 最新版
+        run: |
+          set -uo pipefail   # 刻意不加 -e:這個 job 不該把任何人擋下來
+          latest=$(curl -fsS -m 20 https://pypi.org/pypi/msgmesh/json 2>/dev/null | jq -r '.info.version // empty' 2>/dev/null || echo "")
+          if [ -z "$latest" ]; then
+            echo "· 查不到 PyPI 最新版(索引不可用),略過"
+            exit 0
+          fi
+          echo "PyPI 最新版:msgmesh ${latest}"
+          for ex in $(echo '${{ needs.discover.outputs.python_examples }}' | jq -r '.[]'); do
+            req="${ex}/requirements.txt"
+            [ -f "$req" ] || { echo "· ${ex}:無 requirements.txt,略過"; continue; }
+            pinned=$(sed -n 's/^msgmesh==\([0-9][0-9.]*\)[[:space:]]*$/\1/p' "$req" | head -n 1)
+            [ -n "$pinned" ] || { echo "· ${ex}:沒有 msgmesh==X.Y.Z 這一行,略過(釘版寫法由 python-example 的冒煙把關)"; continue; }
+            if [ "$pinned" = "$latest" ]; then
+              echo "✓ ${ex}:${pinned} 已是最新"
+            else
+              echo "::warning file=${req}::${ex} 的 requirements.txt 釘在 msgmesh==${pinned},PyPI 最新為 ${latest}。若非刻意釘版,請改 requirements.txt 的版本並重跑實跑冒煙。"
             fi
           done
 
@@ -260,15 +369,16 @@ jobs:
   # 沒辦法直接拿去當 branch protection 的 required status check —— 這個可以。
   ci-ok:
     if: always()
-    needs: [discover, example, pr-closes-lint]
+    needs: [discover, example, python-example, pr-closes-lint]
     # 名稱刻意與 job id 相同且維持 ASCII:required status check 是按這個顯示名稱
     # 比對的,改名等於讓 branch protection 靜靜失效(它會一直等一個永不出現的 check)。
     name: ci-ok
     runs-on: ubuntu-latest
     steps:
       - run: |
-          echo "discover=${{ needs.discover.result }}  example=${{ needs.example.result }}  pr-closes-lint=${{ needs['pr-closes-lint'].result }}"
-          if [ "${{ needs.discover.result }}" != "success" ] || [ "${{ needs.example.result }}" != "success" ]; then
+          echo "discover=${{ needs.discover.result }}  example=${{ needs.example.result }}  python-example=${{ needs['python-example'].result }}  pr-closes-lint=${{ needs['pr-closes-lint'].result }}"
+          # python-example 與 example 一樣必須是 success:被略過也算失敗(清單為空在 discover 就已經紅,這裡是第二道)。
+          if [ "${{ needs.discover.result }}" != "success" ] || [ "${{ needs.example.result }}" != "success" ] || [ "${{ needs['python-example'].result }}" != "success" ]; then
             echo "::error::有 job 未成功(含被取消 / 被略過)"
             exit 1
           fi
