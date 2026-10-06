@@ -83,7 +83,7 @@ curl -X POST https://msgmesh-api.alderflux.com/v1/topics/orders/messages -H "Aut
 ### 與 Node 版的差別
 
 - **預設 group。** 是 `agent-notifier-python`,不是 `agent-notifier`。同一個 group 的多個實例會分攤訊息;兩個範例若用同一個名字又同時開著,每則事件只會出現在其中一邊。
-- **HTTP 400 / 401 / 403 / 404。** 401 兩邊都會結束:Node 版印一行後以結束碼 0 結束;這一版印出原因並以結束碼 1 結束(Python SDK 遇到 401 會永久停止輪詢,腳本不結束的話就只是掛在那裡什麼都不做)。key 讀不了這個 topic(403)時,Node 版每秒印一行錯誤並持續重試;這一版印出原因後結束。400 與 404(topic 不存在時,只有開了嚴格 topic 的帳號會拿到 404)在兩邊都和 403 一樣。403 不一定是永久的,長時間執行的 worker 若想繼續重試,把 `main.py` 裡 `report` 的 403 那一段改成只印訊息、不呼叫 `give_up`。
+- **HTTP 400 / 401 / 403 / 404。** 401 兩邊都會結束:Node 版印一行後以結束碼 0 結束;這一版印出原因並以結束碼 1 結束(Python SDK 遇到 401 會永久停止輪詢,腳本不結束的話就只是掛在那裡什麼都不做)。key 讀不了這個 topic(403)時,Node 版持續重試、每試一次印一行錯誤,連續失敗時等待逐次加長(起初最多 1 秒,每次加倍,上限 30 秒;`@msgmesh/sdk` 0.7.0);這一版印出原因後結束。400 與 404(topic 不存在時,只有開了嚴格 topic 的帳號會拿到 404)在兩邊都和 403 一樣。403 不一定是永久的,長時間執行的 worker 若想繼續重試,把 `main.py` 裡 `report` 的 403 那一段改成只印訊息、不呼叫 `give_up`。
 - **key 仍是 `replace-me` 視同沒填**,而且 key 與位址會在送出任何請求之前先檢查。Node 版只檢查 key 不是空的。
 - **`MSGMESH_GATEWAY_URL` 有預設值。** 完全沒設這個變數時,`main.py` 用 `https://msgmesh-api.alderflux.com`。
 - **`.env` 由 `main.py` 自己讀**,不是由執行環境讀(`node --env-file`)。
@@ -104,10 +104,10 @@ curl -X POST https://msgmesh-api.alderflux.com/v1/topics/orders/messages -H "Aut
 
 handler 在 SDK 的背景執行緒上一則一則執行,所以處理得慢會延後下一次輪詢。SDK 是同步 API;在 async 框架裡需自行包 executor。
 
-`handle_event` 丟出例外時,腳本會印出 traceback,然後繼續處理下一則。這靠的是 `on_message` 裡的那個 `try`:沒有它的話,SDK(0.6.0)會把例外交給 `on_error`,並跳過已經取回的這一批裡剩下的訊息,而那些訊息不會再送一次。不管哪一種,處理失敗的那一則都不會重試。
+`handle_event` 丟出例外時,腳本會印出 traceback,然後繼續處理下一則。這靠的是 `on_message` 裡的那個 `try`:沒有它的話,SDK(0.7.0)會把例外交給 `on_error`,並跳過已經取回的這一批裡剩下的訊息,而那些訊息不會再送一次。不管哪一種,處理失敗的那一則都不會重試。
 
 ## 檔案
 
 - `main.py` —— 讀 `.env`、檢查設定、`subscribe()` 監看、處理事件、收到 `Ctrl-C` 或 SIGTERM 時停止。
-- `requirements.txt` —— SDK 釘在確切版本(這裡沒有 lockfile,裝到哪一版 SDK 由這一行決定),另外給 SDK 用的 HTTP client `httpx` 一個版本上限。
+- `requirements.txt` —— SDK 釘在確切版本(這裡沒有 lockfile,裝到哪一版 SDK 由這一行決定)。
 - `.env.example` —— 設定範本(複製成 `.env`)。

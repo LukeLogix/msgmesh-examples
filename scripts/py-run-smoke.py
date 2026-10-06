@@ -9,7 +9,8 @@
 # 那個連線會在攔截點結束,不會帶著假 key 真的打出去;而且那個情境會因為「試圖連外」變紅。
 #
 # 守的東西(每個情境各自寫在下面):
-#   · requirements.txt 第一行是確切版本的 msgmesh,而且裝到的就是那一版;httpx 有上限
+#   · requirements.txt 第一行是確切版本的 msgmesh,而且裝到的就是那一版;裝到的 SDK 自己給了 httpx 上限,
+#     裝到的 httpx 是 0.x
 #   · 照 README 的做法(.env.example 複製成 .env、只改 key)啟動得了,而且真的收到並印出事件
 #   · 啟動時印的兩行、預設 topic / group / 服務位址、Authorization 標頭、環境變數優先於 .env
 #   · key 沒填(空字串與佔位值各一)/ 含非 ASCII 字元 / 含空白或控制字元、位址沒有 http(s)://、
@@ -332,9 +333,16 @@ def check_requirements():
             installed = None
         if installed != pinned.group(1):
             fail(name, f"requirements.txt 釘的是 msgmesh=={pinned.group(1)},這個直譯器裝到的是 {installed}(請用裝過 requirements.txt 的 venv 來跑)")
-    # SDK 自己只要求 httpx>=0.27、沒有上限;httpx 1.x 的開發版會讓這一版 SDK 一啟動就 TypeError。
-    if not any(re.fullmatch(r"httpx>=[0-9.]+,<1", line.strip()) for line in lines):
-        fail(name, "requirements.txt 少了有上限的 httpx 那一行(httpx>=…,<1)")
+    # httpx 的上限:SDK 0.7.0 起自己宣告(httpx>=0.27,<1),requirements.txt 不必再寫一行。更早的 SDK
+    # 沒有上限,而 httpx 1.x 的開發版會讓它一建立 client 就 TypeError。這裡讀裝到的 SDK 的依賴宣告:
+    # 把第一行釘回沒有上限的舊版、或日後的 SDK 把上限拿掉時,這一項會紅(到時候要先對新的 httpx 實跑)。
+    try:
+        sdk_requires = importlib.metadata.requires("msgmesh") or []
+    except importlib.metadata.PackageNotFoundError:
+        sdk_requires = []
+    httpx_specs = [r.split(";")[0] for r in sdk_requires if re.match(r"httpx(?![\w.-])", r) and "extra ==" not in r]
+    if not any(re.search(r"<\s*1(?:\.0)*\s*(?:,|$)", spec) for spec in httpx_specs):
+        fail(name, f"裝到的 msgmesh 沒有給 httpx 版本上限(<1),它宣告的是:{httpx_specs or '(沒有 httpx 這一項)'}")
     try:
         httpx_version = importlib.metadata.version("httpx")
     except importlib.metadata.PackageNotFoundError:
@@ -644,7 +652,7 @@ def scenario_env_file_forms():
 
 
 # ── 11. 處理函式丟例外:印 traceback,同一批後面的訊息照樣處理 ─────────
-# SDK 0.6.0 的實際行為(實測):handler 丟出例外時,SDK 把它交給 on_error,同一批剩下的訊息不再處理、
+# SDK 0.7.0 的實際行為(實測;0.6.0 相同):handler 丟出例外時,SDK 把它交給 on_error,同一批剩下的訊息不再處理、
 # 也不會重送。main.py 在自己的 on_message 裡接住例外,就是為了不讓一則壞訊息拖掉同批其餘的。
 # 這裡讓第二則的 value 不是字串(真的 gateway 不會這樣),範例的 handle_event 會因此丟 TypeError。
 def scenario_handler_error():
