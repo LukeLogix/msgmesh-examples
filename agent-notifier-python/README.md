@@ -69,16 +69,16 @@ In the cases in the table below, the script prints the reason and exits with cod
 | `MSGMESH_GATEWAY_URL must start with https:// or http://` | The address is missing its scheme | Use `https://msgmesh-api.alderflux.com` |
 | `.env is not UTF-8 text` | The file was saved in another encoding (UTF-16, for example) | Save `.env` as UTF-8 |
 | `.env could not be read` | The file is there, but your user is not allowed to read it | Fix the permissions of `.env` |
-| `rejected the request for topic "orders" as invalid (HTTP 400)` | The platform does not accept the request. Usually the topic name is not an allowed one, for example because a comment was put after the value in `.env` | Check `MSGMESH_TOPIC` |
+| `as invalid (HTTP 400)` | The platform does not accept the request. Usually the topic name is not an allowed one, for example because a comment was put after the value in `.env` | Check `MSGMESH_TOPIC` |
 | `the API key was rejected (HTTP 401)` | The key is wrong, or it has been deleted | Check `MSGMESH_API_KEY`; issue a new key if needed |
-| `refused to let this key read topic "orders" (HTTP 403)` | Usually the key lacks the consumer or subscribe capability on this topic (a key that can only publish cannot receive), or it is restricted to rooms | Use a key that can receive: see item 2 of "Common prerequisites" in the root README |
-| `topic "orders" was not found (HTTP 404)` | You only get this when the account has turned on 「要求 topic 先建立(strict topics)」 ("require topics to be created first") on the panel's Keys page and the topic does not exist yet, or when `MSGMESH_GATEWAY_URL` points at something other than MsgMesh. With that setting off, as it is by default, a missing topic gives no error: see "If no event shows up" above | Create the topic in the panel, or point `MSGMESH_TOPIC` at one that exists; check the address shown in the message |
+| `refused to let this key read topic` … `(HTTP 403)` | Usually the key lacks the consumer or subscribe capability on this topic (a key that can only publish cannot receive), or it is restricted to rooms | Use a key that can receive: see item 2 of "Common prerequisites" in the root README |
+| `was not found (HTTP 404)` | You only get this when the account has turned on 「要求 topic 先建立(strict topics)」 ("require topics to be created first") on the panel's Keys page and the topic does not exist yet, or when `MSGMESH_GATEWAY_URL` points at something other than MsgMesh. With that setting off, as it is by default, a missing topic gives no error: see "If no event shows up" above | Create the topic in the panel, or point `MSGMESH_TOPIC` at one that exists; check the address shown in the message |
 
 For the four with an HTTP status, the server's own reason is on the line after the message. If the key in use came from an environment variable and differs from the one in `.env`, one more line says so. That happens, for example, when you start `main.py` in the terminal where you ran the `export` line above and have changed `.env` since. If an error text contains the key itself, the key is printed as `***`.
 
 Other errors (network trouble, a 5xx response, rate limiting) do not end the script: the SDK keeps retrying. The script prints a line starting with `agent-notifier-python: subscribe error`, with the exception class and the gateway address. While the same kind of error keeps happening, that line is printed at most once every 30 seconds: the first line carries no count, and from the second one on it says how many errors of that kind there have been so far.
 
-If whatever reads the script's output goes away (for example `.venv/bin/python main.py | head -1`), the script stops without printing anything more and exits with code 1.
+If whatever reads the script's output goes away (for example when the output is piped into `head -1`), the script notices the next time it has something to print: it stops without printing anything more and exits with code 1. Until then (while no event arrives) it keeps waiting as usual.
 
 ### How it differs from the Node version
 

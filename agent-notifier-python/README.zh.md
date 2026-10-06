@@ -69,16 +69,16 @@ curl -X POST https://msgmesh-api.alderflux.com/v1/topics/orders/messages -H "Aut
 | `MSGMESH_GATEWAY_URL must start with https:// or http://` | 位址少了開頭的協定 | 用 `https://msgmesh-api.alderflux.com` |
 | `.env is not UTF-8 text` | 檔案存成了別的編碼(例如 UTF-16) | 把 `.env` 存成 UTF-8 |
 | `.env could not be read` | 檔案在,但你的使用者沒有讀取權限 | 修正 `.env` 的權限 |
-| `rejected the request for topic "orders" as invalid (HTTP 400)` | 平台不接受這個請求。多半是 topic 名稱不合規則,例如 `.env` 的值後面加了註解 | 檢查 `MSGMESH_TOPIC` |
+| `as invalid (HTTP 400)` | 平台不接受這個請求。多半是 topic 名稱不合規則,例如 `.env` 的值後面加了註解 | 檢查 `MSGMESH_TOPIC` |
 | `the API key was rejected (HTTP 401)` | key 不對,或已被刪除 | 檢查 `MSGMESH_API_KEY`,必要時重簽一把 |
-| `refused to let this key read topic "orders" (HTTP 403)` | 多半是這把 key 在這個 topic 上沒有 consumer 或 subscribe 能力(只能發布的 key 收不了),或限定了房間 | 換一把能收的 key:見根 README「共同前置」第 2 項 |
-| `topic "orders" was not found (HTTP 404)` | 只有兩種情況會出現:帳號在面板 Keys 頁開了「要求 topic 先建立(strict topics)」而這個 topic 還沒建,或 `MSGMESH_GATEWAY_URL` 指到了 MsgMesh 以外的服務。這個開關關著時(預設),topic 不存在不會報錯:見上面「一直沒有事件時」 | 在面板建立這個 topic,或把 `MSGMESH_TOPIC` 改成已存在的;檢查訊息裡印出的位址 |
+| `refused to let this key read topic` … `(HTTP 403)` | 多半是這把 key 在這個 topic 上沒有 consumer 或 subscribe 能力(只能發布的 key 收不了),或限定了房間 | 換一把能收的 key:見根 README「共同前置」第 2 項 |
+| `was not found (HTTP 404)` | 只有兩種情況會出現:帳號在面板 Keys 頁開了「要求 topic 先建立(strict topics)」而這個 topic 還沒建,或 `MSGMESH_GATEWAY_URL` 指到了 MsgMesh 以外的服務。這個開關關著時(預設),topic 不存在不會報錯:見上面「一直沒有事件時」 | 在面板建立這個 topic,或把 `MSGMESH_TOPIC` 改成已存在的;檢查訊息裡印出的位址 |
 
 帶 HTTP 狀態碼的那四種,訊息的下一行是伺服器回的原因。如果用到的 key 來自環境變數、而且與 `.env` 裡的不同,會再多印一行說明。舉例:在跑過上面那行 `export` 的終端啟動 `main.py`,而 `.env` 在那之後改過,就會是這種情況。錯誤文字裡若出現 key 本身,會印成 `***`。
 
 其他錯誤(網路問題、5xx 回應、限流)不會讓腳本結束:SDK 會持續重試。腳本會印一行以 `agent-notifier-python: subscribe error` 開頭的訊息,帶例外類別與 gateway 位址。同一種錯誤持續發生時,這一行每 30 秒最多印一次:第一行不附次數,第二次起附上這種錯誤到目前為止的累計次數。
 
-讀這支腳本輸出的那一端不見了的話(例如 `.venv/bin/python main.py | head -1`),腳本不再印任何東西,以結束碼 1 結束。
+讀這支腳本輸出的那一端不見了的話(例如把輸出接到 `head -1`),腳本會在下一次有東西要印的時候發現,不再印任何東西,以結束碼 1 結束;在那之前(topic 一直沒有事件時)它照常等著。
 
 ### 與 Node 版的差別
 
