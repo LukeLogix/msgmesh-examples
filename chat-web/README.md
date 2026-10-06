@@ -52,7 +52,7 @@ Data flow (frontend room → token scope-down → subscribe/publish):
 - **Don't want rooms at all**: leave `MSGMESH_ROOMS` and `VITE_MSGMESH_ROOMS` empty; omitting `rooms` = no room restriction = a single lobby, behaving like the older version.
 - **Only realtime supports per-room**: an SSE / WS subscription can carry `?room=` to precisely receive a single room; but poll / consume (long-polling the whole topic) is a **firehose** where room-scoped credentials don't work (the platform returns 403) — for fine-grained rooms, use realtime. See [`agent-notifier/README.md`](../agent-notifier/README.md) for details.
 
-> Version note: both sides now use the same word. `publish(…, { room })` requires `@msgmesh/sdk` **0.2.0 or newer** — before 0.2.0 that option was called `key`, and 0.2.0 throws if you still pass `key` rather than silently dropping the routing. The **subscribe-side `{ room }` filtering of `stream`/`streamWs`** has been supported since 0.1.4. The backlog seam (next section but one) needs **0.3.0 or newer**, because it dedupes by message id; `package.json` asks for `^0.5.0`.
+> Version note: both sides now use the same word. `publish(…, { room })` requires `@msgmesh/sdk` **0.2.0 or newer** — before 0.2.0 that option was called `key`, and 0.2.0 throws if you still pass `key` rather than silently dropping the routing. The **subscribe-side `{ room }` filtering of `stream`/`streamWs`** has been supported since 0.1.4. The backlog seam (next section but one) needs **0.3.0 or newer**, because it dedupes by message id; `package.json` asks for `^0.7.0`.
 
 ## Receiving over WebSocket (streamWs)
 

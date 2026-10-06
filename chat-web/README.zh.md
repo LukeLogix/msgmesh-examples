@@ -51,7 +51,7 @@ SDK 拿到 token 後會自動快取、於將過期前重取、SSE 重連時換�
 - **不想分房間**:留空 `MSGMESH_ROOMS` 與 `VITE_MSGMESH_ROOMS`,`rooms` 省略 = 不限房間 = 單一大廳,行為同舊版。
 - **只有 realtime 能 per-room**:SSE / WS 訂閱可帶 `?room=` 精準收單一房間;但 poll / consume(長輪詢整個 topic)是 **firehose**,room-scoped 憑證用不了(平台回 403)——細顆粒房間請走 realtime。詳見 [`agent-notifier/README.zh.md`](../agent-notifier/README.zh.md)。
 
-> 版本註記:收發兩端現在同一個詞。發佈端 `publish(…, { room })` 需 `@msgmesh/sdk` **0.2.0 以上** —— 0.2.0 之前這個選項叫 `key`,而 0.2.0 若仍傳 `key` 會直接丟錯(不會靜默把房間路由丟掉)。**訂閱端 `stream`/`streamWs` 的 `{ room }` 過濾**自 0.1.4 起支援。補歷史的接縫(見下下節)按訊息 id 去重,需 **0.3.0 以上**;`package.json` 要求的是 `^0.5.0`。
+> 版本註記:收發兩端現在同一個詞。發佈端 `publish(…, { room })` 需 `@msgmesh/sdk` **0.2.0 以上** —— 0.2.0 之前這個選項叫 `key`,而 0.2.0 若仍傳 `key` 會直接丟錯(不會靜默把房間路由丟掉)。**訂閱端 `stream`/`streamWs` 的 `{ room }` 過濾**自 0.1.4 起支援。補歷史的接縫(見下下節)按訊息 id 去重,需 **0.3.0 以上**;`package.json` 要求的是 `^0.7.0`。
 
 ## 用 WebSocket 收(streamWs)
 
